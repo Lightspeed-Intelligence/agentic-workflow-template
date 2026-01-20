@@ -115,7 +115,7 @@ jobs:
           } >> $GITHUB_OUTPUT
 
       - name: Checkout Action
-        if: always() && inputs.use_feishu_notify && secrets.FEISHU_WEBHOOK_TOKEN != ''
+        if: always() && inputs.use_feishu_notify
         uses: actions/checkout@v5
         with:
           repository: vast-enterprise/agentic-workflow-template
@@ -123,7 +123,7 @@ jobs:
           sparse-checkout: .github/actions
 
       - name: Notify Feishu
-        if: always() && inputs.use_feishu_notify && secrets.FEISHU_WEBHOOK_TOKEN != ''
+        if: always() && inputs.use_feishu_notify
         uses: ./.agentic-actions/.github/actions/feishu-notify
         with:
           webhook_token: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
