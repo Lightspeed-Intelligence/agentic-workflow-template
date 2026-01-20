@@ -45,12 +45,16 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           use_sticky_comment: true
           prompt: |
+            仓库: ${{ github.repository }}
+            仓库 URL: https://github.com/${{ github.repository }}
+
             执行 `pr-review` skill 审查 PR #${{ github.event.pull_request.number }}，并使用 `gh pr comment` 发表审查评论。
 
             Title: ${{ github.event.pull_request.title }}
             Author: ${{ github.event.pull_request.user.login }}
 
             审查完成后必须调用 `gh pr comment ${{ github.event.pull_request.number }} --body "..."` 发表审查结果。
+            注意: 所有代码链接必须使用 https://github.com/${{ github.repository }}/blob/main/... 格式。
           claude_args: |
             --model opus --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep,Task,Skill"
             --json-schema '{

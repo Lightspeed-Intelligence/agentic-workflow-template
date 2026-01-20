@@ -52,6 +52,9 @@ jobs:
           github_token: ${{ github.token }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
+            仓库: ${{ github.repository }}
+            仓库 URL: https://github.com/${{ github.repository }}
+
             执行 `answer-question` skill 回答问题，并使用 `gh issue comment` 将回答发表到 Issue。
 
             Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
@@ -61,6 +64,7 @@ jobs:
             问题: ${{ github.event.comment.body }}
 
             完成后必须调用 `gh issue comment ${{ github.event.issue.number }} --body "..."` 发表评论。
+            注意: 所有代码链接必须使用 https://github.com/${{ github.repository }}/blob/main/... 格式。
           claude_args: |
             --model opus --allowedTools "Bash(gh issue comment:*),Read,Glob,Grep,Skill"
             --json-schema '{
