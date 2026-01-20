@@ -47,8 +47,7 @@ description: 根据 Issue 的讨论和方案, 实现功能或修复 Bug, 并创�
 | **PR** | #{pr_number} |
 
 <details>
-<summary><sub>📝 变更摘要</sub></summary>
-<sub>
+<summary>📝 变更摘要</summary>
 
 **分支**: `{branch_name}`
 
@@ -58,7 +57,6 @@ description: 根据 Issue 的讨论和方案, 实现功能或修复 Bug, 并创�
 
 **实现说明**: {简述实现方式}
 
-</sub>
 </details>
 
 {如有多个 submodule PR}
@@ -78,11 +76,9 @@ description: 根据 Issue 的讨论和方案, 实现功能或修复 Bug, 并创�
 | **原因** | {说明} |
 
 <details>
-<summary><sub>📋 已完成的工作</sub></summary>
-<sub>
+<summary>📋 已完成的工作</summary>
 
 {如有部分进展，列出}
 
-</sub>
 </details>
 ```

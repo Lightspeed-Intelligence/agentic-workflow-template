@@ -26,7 +26,7 @@ jobs:
       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
     with:
-      use_feishu_notify: false
+      use_feishu_notify: true
 
   implement:
     if: github.event_name == 'issue_comment' && github.event.issue.pull_request == null
@@ -37,7 +37,7 @@ jobs:
       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
     with:
-      use_feishu_notify: false
+      use_feishu_notify: true
 
   question:
     if: github.event_name == 'issue_comment' && github.event.issue.pull_request == null
@@ -48,7 +48,7 @@ jobs:
       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
     with:
-      use_feishu_notify: false
+      use_feishu_notify: true
 
   pr-review:
     if: github.event_name == 'pull_request'
@@ -59,4 +59,4 @@ jobs:
       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
     with:
-      use_feishu_notify: false
+      use_feishu_notify: true

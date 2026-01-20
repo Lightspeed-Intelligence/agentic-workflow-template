@@ -65,35 +65,29 @@ PR 可能有多次提交，需要支持增量审查：
 {一句话总结}
 
 <details>
-<summary><sub>🔴 阻塞问题 (N)</sub></summary>
-<sub>
+<summary>🔴 阻塞问题 (N)</summary>
 
 - **文件**: `{path}` [代码链接]({github_link})
 - **问题**: {描述}
 - **建议**: {修复方式}
 
-</sub>
 </details>
 
 <details>
-<summary><sub>🟠 重要建议 (N)</sub></summary>
-<sub>
+<summary>🟠 重要建议 (N)</summary>
 
 - **文件**: `{path}`
 - **问题**: {描述}
 - **建议**: {改进方式}
 
-</sub>
 </details>
 
 <details>
-<summary><sub>🟢 小问题 (N)</sub></summary>
-<sub>
+<summary>🟢 小问题 (N)</summary>
 
 - **文件**: `{path}`
 - **问题**: {风格或小建议}
 
-</sub>
 </details>
 ```
 

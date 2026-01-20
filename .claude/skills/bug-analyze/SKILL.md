@@ -50,8 +50,7 @@ description: 分析 Bug 类型 Issue, 定位根因, 并对简单 Bug 自动创�
 | **可自动修复** | ✅ 是 / ❌ 否 |
 
 <details>
-<summary><sub>📋 详细分析</sub></summary>
-<sub>
+<summary>📋 详细分析</summary>
 
 **复现路径**:
 1. {步骤}
@@ -60,7 +59,6 @@ description: 分析 Bug 类型 Issue, 定位根因, 并对简单 Bug 自动创�
 
 **问题原因**: {技术分析}
 
-</sub>
 </details>
 
 {如已创建修复 PR}

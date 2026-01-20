@@ -44,22 +44,18 @@ description: 评审需求(PRD), 从业务价值和技术可行性角度回答问
 - {是否涉及数据变更}
 
 <details>
-<summary><sub>🔧 技术细节</sub></summary>
-<sub>
+<summary>🔧 技术细节</summary>
 
 **涉及模块**: {列出}
 **关键文件**: [{文件}]({github_link})
 **技术风险**: {如有}
 
-</sub>
 </details>
 
 <details>
-<summary><sub>❓ 待澄清问题</sub></summary>
-<sub>
+<summary>❓ 待澄清问题</summary>
 
 - {需求不明确的地方，用问句形式}
 
-</sub>
 </details>
 ```

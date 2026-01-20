@@ -37,8 +37,7 @@ description: 通用问答, 回答用户咨询、技术探讨等非错误、非�
 ---
 
 <details>
-<summary><sub>📖 技术细节</sub></summary>
-<sub>
+<summary>📖 技术细节</summary>
 
 **相关代码**: [{文件}:{行号}]({github_link})
 
@@ -48,7 +47,6 @@ description: 通用问答, 回答用户咨询、技术探讨等非错误、非�
 
 {补充解释}
 
-</sub>
 </details>
 ```
 
@@ -63,11 +61,9 @@ description: 通用问答, 回答用户咨询、技术探讨等非错误、非�
 - {方向 2}
 
 <details>
-<summary><sub>❓ 需要更多信息</sub></summary>
-<sub>
+<summary>❓ 需要更多信息</summary>
 
 - {需要什么信息才能准确回答}
 
-</sub>
 </details>
 ```
