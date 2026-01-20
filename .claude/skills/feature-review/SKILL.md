@@ -29,10 +29,12 @@ description: 评审需求(PRD), 从业务价值和技术可行性角度回答问
 ## 模板
 
 ```markdown
-### 需求评审 #${issue_number}
+## 📋 需求评审 #${issue_number}
 
-**业务价值**: {这个功能解决什么用户问题}
-**预估成本**: small | medium | large | extra-large
+| 项目 | 评估 |
+|------|------|
+| **业务价值** | {这个功能解决什么用户问题} |
+| **预估成本** | 🟢 small / 🟡 medium / 🟠 large / 🔴 extra-large |
 
 **主要挑战**:
 - {用业务语言描述难点，如"需要对接第三方系统"}
@@ -42,18 +44,22 @@ description: 评审需求(PRD), 从业务价值和技术可行性角度回答问
 - {是否涉及数据变更}
 
 <details>
-<summary>技术细节</summary>
+<summary><sub>🔧 技术细节</sub></summary>
+<sub>
 
 **涉及模块**: {列出}
 **关键文件**: [{文件}]({github_link})
 **技术风险**: {如有}
 
+</sub>
 </details>
 
 <details>
-<summary>待澄清问题</summary>
+<summary><sub>❓ 待澄清问题</sub></summary>
+<sub>
 
 - {需求不明确的地方，用问句形式}
 
+</sub>
 </details>
 ```

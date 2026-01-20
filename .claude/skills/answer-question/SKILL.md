@@ -30,12 +30,15 @@ description: 通用问答, 回答用户咨询、技术探讨等非错误、非�
 ## 模板
 
 ```markdown
-### 回答 #${issue_number}
+## 💬 回答 #${issue_number}
 
 {直接简洁的回答}
 
+---
+
 <details>
-<summary>技术细节</summary>
+<summary><sub>📖 技术细节</sub></summary>
+<sub>
 
 **相关代码**: [{文件}:{行号}]({github_link})
 
@@ -45,12 +48,13 @@ description: 通用问答, 回答用户咨询、技术探讨等非错误、非�
 
 {补充解释}
 
+</sub>
 </details>
 ```
 
 无法确定时：
 ```markdown
-### 回答 #${issue_number}
+## 💬 回答 #${issue_number}
 
 {说明无法确定的原因}
 
@@ -58,6 +62,12 @@ description: 通用问答, 回答用户咨询、技术探讨等非错误、非�
 - {方向 1}
 - {方向 2}
 
-**需要更多信息**:
+<details>
+<summary><sub>❓ 需要更多信息</sub></summary>
+<sub>
+
 - {需要什么信息才能准确回答}
+
+</sub>
+</details>
 ```

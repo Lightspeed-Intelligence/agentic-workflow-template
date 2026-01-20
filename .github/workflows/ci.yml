@@ -3,7 +3,7 @@ name: CI
 
 on:
   issues:
-    types: [opened, labeled]
+    types: [opened]  # 只监听 opened，避免 labeled 重复触发
   issue_comment:
     types: [created]
   pull_request:

@@ -41,14 +41,17 @@ description: 分析 Bug 类型 Issue, 定位根因, 并对简单 Bug 自动创�
 ## 模板
 
 ```markdown
-### Bug 分析 #${issue_number}
+## 🐛 Bug 分析 #${issue_number}
 
-**根因**: {一句话概括}
-**严重程度**: critical | high | medium | low
-**可自动修复**: 是 | 否
+| 项目 | 结果 |
+|------|------|
+| **根因** | {一句话概括} |
+| **严重程度** | 🔴 critical / 🟠 high / 🟡 medium / 🟢 low |
+| **可自动修复** | ✅ 是 / ❌ 否 |
 
 <details>
-<summary>详细分析</summary>
+<summary><sub>📋 详细分析</sub></summary>
+<sub>
 
 **复现路径**:
 1. {步骤}
@@ -57,8 +60,10 @@ description: 分析 Bug 类型 Issue, 定位根因, 并对简单 Bug 自动创�
 
 **问题原因**: {技术分析}
 
+</sub>
 </details>
 
 {如已创建修复 PR}
-**修复 PR**: #{pr_number}
+---
+✅ **修复 PR**: #{pr_number}
 ```

@@ -55,58 +55,70 @@ PR 可能有多次提交，需要支持增量审查：
 ## 模板
 
 ```markdown
-### PR 审查
+## 🔍 PR 审查
 
-**结论**: APPROVE | REQUEST_CHANGES | COMMENT
-**审查截止**: {commit_sha}
+| 项目 | 结果 |
+|------|------|
+| **结论** | ✅ APPROVE / ⚠️ REQUEST_CHANGES / 💬 COMMENT |
+| **审查截止** | `{commit_sha}` |
 
 {一句话总结}
 
 <details>
-<summary>🔴 阻塞问题</summary>
+<summary><sub>🔴 阻塞问题 (N)</sub></summary>
+<sub>
 
 - **文件**: `{path}` [代码链接]({github_link})
 - **问题**: {描述}
 - **建议**: {修复方式}
 
+</sub>
 </details>
 
 <details>
-<summary>🟠 重要建议</summary>
+<summary><sub>🟠 重要建议 (N)</sub></summary>
+<sub>
 
 - **文件**: `{path}`
 - **问题**: {描述}
 - **建议**: {改进方式}
 
+</sub>
 </details>
 
 <details>
-<summary>🟢 小问题</summary>
+<summary><sub>🟢 小问题 (N)</sub></summary>
+<sub>
 
 - **文件**: `{path}`
 - **问题**: {风格或小建议}
 
+</sub>
 </details>
 ```
 
 无问题时输出：
 
 ```markdown
-### PR 审查
+## 🔍 PR 审查
 
-**结论**: APPROVE
-**审查截止**: {commit_sha}
+| 项目 | 结果 |
+|------|------|
+| **结论** | ✅ APPROVE |
+| **审查截止** | `{commit_sha}` |
 
-无问题。已检查 bug 和代码规范。
+代码良好，无问题。已检查 bug 和代码规范。
 ```
 
 增量审查时输出：
 
 ```markdown
-### PR 增量审查
+## 🔍 PR 增量审查
 
-**结论**: APPROVE | REQUEST_CHANGES | COMMENT
-**审查范围**: {last_sha}..{current_sha}
+| 项目 | 结果 |
+|------|------|
+| **结论** | ✅ APPROVE / ⚠️ REQUEST_CHANGES / 💬 COMMENT |
+| **审查范围** | `{last_sha}..{current_sha}` |
 
 {针对增量改动的总结}
 
