@@ -42,6 +42,13 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+# 必须授予 reusable workflow 所需的权限
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  id-token: write
+
 jobs:
   # Issue 创建/打标签时自动分析
   issue-dispatch:
