@@ -1,0 +1,55 @@
+# 本仓库的 CI 配置 - 调用自身的 reusable workflows
+name: CI
+
+on:
+  issues:
+    types: [opened, labeled]
+  issue_comment:
+    types: [created]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  issue-dispatch:
+    if: github.event_name == 'issues'
+    uses: ./.github/workflows/issue-dispatch.yml
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
+    with:
+      use_feishu_notify: false
+
+  implement:
+    if: github.event_name == 'issue_comment' && github.event.issue.pull_request == null
+    uses: ./.github/workflows/implement.yml
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
+    with:
+      use_feishu_notify: false
+
+  question:
+    if: github.event_name == 'issue_comment' && github.event.issue.pull_request == null
+    uses: ./.github/workflows/question.yml
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
+    with:
+      use_feishu_notify: false
+
+  pr-review:
+    if: github.event_name == 'pull_request'
+    uses: ./.github/workflows/pr-review.yml
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
+    with:
+      use_feishu_notify: false
