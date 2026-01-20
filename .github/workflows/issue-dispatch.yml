@@ -44,12 +44,14 @@ jobs:
           github_token: ${{ github.token }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            根据 Issue 标签和内容，选择 `bug-analyze`、`feature-review` 或 `answer-question` 处理。
+            根据 Issue 标签和内容，选择 `bug-analyze`、`feature-review` 或 `answer-question` skill 处理，并使用 `gh issue comment` 将分析结果发表到 Issue。
 
             Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
             Labels: ${{ join(github.event.issue.labels.*.name, ', ') }}
             Body:
             ${{ github.event.issue.body }}
+
+            完成分析后必须调用 `gh issue comment ${{ github.event.issue.number }} --body "..."` 发表评论。
           claude_args: |
             --model opus --allowedTools "Bash(gh issue:*),Bash(gh pr:*),Bash(git:*),Read,Write,Edit,Glob,Grep,Task"
             --json-schema '{

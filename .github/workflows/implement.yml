@@ -51,13 +51,15 @@ jobs:
           github_token: ${{ github.token }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            用户已确认，执行 `implement` skill 实现 Issue #${{ github.event.issue.number }}。
+            用户已确认，执行 `implement` skill 实现 Issue #${{ github.event.issue.number }}，并使用 `gh issue comment` 报告进度。
 
             Issue: ${{ github.event.issue.title }}
             Body:
             ${{ github.event.issue.body }}
 
             触发评论: ${{ github.event.comment.body }}
+
+            实现完成后必须调用 `gh issue comment ${{ github.event.issue.number }} --body "..."` 发表评论，说明创建的 PR 或遇到的问题。
           claude_args: |
             --model opus --allowedTools "Bash(gh issue:*),Bash(gh pr:*),Bash(git:*),Read,Write,Edit,Glob,Grep,Task"
             --json-schema '{

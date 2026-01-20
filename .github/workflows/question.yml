@@ -52,13 +52,15 @@ jobs:
           github_token: ${{ github.token }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
-            执行 `answer-question` skill 回答问题。
+            执行 `answer-question` skill 回答问题，并使用 `gh issue comment` 将回答发表到 Issue。
 
             Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
             Body:
             ${{ github.event.issue.body }}
 
             问题: ${{ github.event.comment.body }}
+
+            完成后必须调用 `gh issue comment ${{ github.event.issue.number }} --body "..."` 发表评论。
           claude_args: |
             --model opus --allowedTools "Bash(gh issue comment:*),Read,Glob,Grep"
             --json-schema '{
