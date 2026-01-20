@@ -1,0 +1,143 @@
+# Reusable Workflow: Issue Dispatch
+# 根据 Issue 标签自动分发到对应 Skill
+name: Issue Dispatch (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      use_feishu_notify:
+        description: '是否发送飞书通知'
+        type: boolean
+        default: true
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+      ANTHROPIC_BASE_URL:
+        required: false
+      PAT_TOKEN:
+        required: false
+      FEISHU_WEBHOOK_TOKEN:
+        required: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          token: ${{ secrets.PAT_TOKEN || github.token }}
+
+      - name: Analyze Issue with Claude
+        id: analyze
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          github_token: ${{ github.token }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            根据 Issue 标签和内容，选择 `bug-analyze`、`feature-review` 或 `answer-question` 处理。
+
+            Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
+            Labels: ${{ join(github.event.issue.labels.*.name, ', ') }}
+            Body:
+            ${{ github.event.issue.body }}
+          claude_args: |
+            --model opus --allowedTools "Bash(gh issue:*),Bash(gh pr:*),Bash(git:*),Read,Write,Edit,Glob,Grep,Task"
+            --json-schema '{
+              "type": "object",
+              "properties": {
+                "description": {"type": "string", "description": "执行结果的一句话摘要，用于通知"},
+                "issue_type": {"type": "string", "enum": ["bug", "feature", "question"], "description": "Issue 类型"},
+                "severity": {"type": "string", "enum": ["critical", "high", "medium", "low", "n/a"], "description": "Bug 严重程度"},
+                "cost": {"type": "string", "enum": ["small", "medium", "large", "extra-large", "n/a"], "description": "需求预估成本"}
+              },
+              "required": ["description", "issue_type"]
+            }'
+
+      - name: Output Result
+        if: always()
+        run: |
+          echo "## Issue Analysis Result" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo '${{ steps.analyze.outputs.structured_output }}' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Parse Analysis Output
+        if: always() && inputs.use_feishu_notify
+        id: parse
+        run: |
+          STRUCTURED_OUTPUT='${{ steps.analyze.outputs.structured_output }}'
+
+          if [ -n "$STRUCTURED_OUTPUT" ] && [ "$STRUCTURED_OUTPUT" != "null" ]; then
+            DESCRIPTION=$(echo "$STRUCTURED_OUTPUT" | jq -r '.description // "无描述"')
+            ISSUE_TYPE=$(echo "$STRUCTURED_OUTPUT" | jq -r '.issue_type // "unknown"')
+            SEVERITY=$(echo "$STRUCTURED_OUTPUT" | jq -r '.severity // "n/a"')
+            COST=$(echo "$STRUCTURED_OUTPUT" | jq -r '.cost // "n/a"')
+
+            TITLE="Issue 分析: ${ISSUE_TYPE}"
+            if [ "$ISSUE_TYPE" == "bug" ]; then
+              TITLE="Bug 分析 - 严重程度: ${SEVERITY}"
+              case "$SEVERITY" in
+                "critical") STATUS="error" ;;
+                "high") STATUS="warning" ;;
+                *) STATUS="info" ;;
+              esac
+            elif [ "$ISSUE_TYPE" == "feature" ]; then
+              TITLE="需求评审 - 成本: ${COST}"
+              STATUS="info"
+            else
+              STATUS="info"
+            fi
+          else
+            TITLE="Issue 分析失败"
+            DESCRIPTION="未能获取结构化输出"
+            STATUS="warning"
+          fi
+
+          if [ "${{ job.status }}" != "success" ]; then
+            STATUS="warning"
+            DESCRIPTION="GitHub Action 执行失败"
+          fi
+
+          echo "status=${STATUS}" >> $GITHUB_OUTPUT
+          echo "title=${TITLE}" >> $GITHUB_OUTPUT
+
+          # 多行输出使用 heredoc
+          {
+            echo 'description<<EOF'
+            echo "**${{ github.repository }}** #${{ github.event.issue.number }}"
+            echo "*${{ github.event.issue.title }}*"
+            echo "${DESCRIPTION}"
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Checkout Action
+        if: always() && inputs.use_feishu_notify && secrets.FEISHU_WEBHOOK_TOKEN != ''
+        uses: actions/checkout@v5
+        with:
+          repository: vast-enterprise/agentic-workflow-template
+          path: .agentic-actions
+          sparse-checkout: .github/actions
+
+      - name: Notify Feishu
+        if: always() && inputs.use_feishu_notify && secrets.FEISHU_WEBHOOK_TOKEN != ''
+        uses: ./.agentic-actions/.github/actions/feishu-notify
+        with:
+          webhook_token: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
+          title: ${{ steps.parse.outputs.title }}
+          description: ${{ steps.parse.outputs.description }}
+          link_text: '🔗 查看 Issue'
+          link_url: ${{ github.event.issue.html_url }}
+          status: ${{ steps.parse.outputs.status }}
+
+    outputs:
+      structured_output: ${{ steps.analyze.outputs.structured_output }}

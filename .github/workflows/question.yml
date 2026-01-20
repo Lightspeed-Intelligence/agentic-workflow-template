@@ -1,0 +1,130 @@
+# Reusable Workflow: Answer Question
+# 回答 Issue 中的问题
+name: Answer Question (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      trigger_keywords:
+        description: '触发问答的关键词 JSON 数组'
+        type: string
+        default: '["/ask", "/question", "/q", "/?"]'
+      use_feishu_notify:
+        description: '是否发送飞书通知'
+        type: boolean
+        default: true
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+      ANTHROPIC_BASE_URL:
+        required: false
+      PAT_TOKEN:
+        required: false
+      FEISHU_WEBHOOK_TOKEN:
+        required: false
+
+jobs:
+  answer:
+    runs-on: ubuntu-latest
+    if: |
+      startsWith(github.event.comment.body, '/ask') ||
+      startsWith(github.event.comment.body, '/question') ||
+      startsWith(github.event.comment.body, '/q') ||
+      startsWith(github.event.comment.body, '/?')
+    permissions:
+      contents: read
+      issues: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          token: ${{ secrets.PAT_TOKEN || github.token }}
+
+      - name: Answer Question with Claude
+        id: answer
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          github_token: ${{ github.token }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            执行 `answer-question` skill 回答问题。
+
+            Issue #${{ github.event.issue.number }}: ${{ github.event.issue.title }}
+            Body:
+            ${{ github.event.issue.body }}
+
+            问题: ${{ github.event.comment.body }}
+          claude_args: |
+            --model opus --allowedTools "Bash(gh issue comment:*),Read,Glob,Grep"
+            --json-schema '{
+              "type": "object",
+              "properties": {
+                "description": {"type": "string", "description": "回答内容的一句话摘要"}
+              },
+              "required": ["description"]
+            }'
+
+      - name: Output Result
+        if: always()
+        run: |
+          echo "## Answer Result" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo '${{ steps.answer.outputs.structured_output }}' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Parse answer output
+        if: always() && inputs.use_feishu_notify
+        id: parse
+        run: |
+          STRUCTURED_OUTPUT='${{ steps.answer.outputs.structured_output }}'
+          if [ -n "$STRUCTURED_OUTPUT" ] && [ "$STRUCTURED_OUTPUT" != "null" ]; then
+            DESCRIPTION=$(echo "$STRUCTURED_OUTPUT" | jq -r '.description // "已回答问题"')
+            STATUS="success"
+          else
+            DESCRIPTION="未能获取回答结果"
+            STATUS="error"
+          fi
+
+          if [ "${{ job.status }}" != "success" ]; then
+            STATUS="warning"
+            DESCRIPTION="GitHub Action 执行失败"
+          fi
+
+          echo "status=${STATUS}" >> $GITHUB_OUTPUT
+          echo "title=问题已回答" >> $GITHUB_OUTPUT
+
+          # 多行输出使用 heredoc
+          {
+            echo 'description<<EOF'
+            echo "**${{ github.repository }}** #${{ github.event.issue.number }}"
+            echo "*${{ github.event.issue.title }}*"
+            echo "${DESCRIPTION}"
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Checkout Action
+        if: always() && inputs.use_feishu_notify && secrets.FEISHU_WEBHOOK_TOKEN != ''
+        uses: actions/checkout@v5
+        with:
+          repository: vast-enterprise/agentic-workflow-template
+          path: .agentic-actions
+          sparse-checkout: .github/actions
+
+      - name: Notify Feishu
+        if: always() && inputs.use_feishu_notify && secrets.FEISHU_WEBHOOK_TOKEN != ''
+        uses: ./.agentic-actions/.github/actions/feishu-notify
+        with:
+          webhook_token: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
+          title: ${{ steps.parse.outputs.title }}
+          description: ${{ steps.parse.outputs.description }}
+          link_text: '🔗 查看 Issue'
+          link_url: ${{ github.event.issue.html_url }}
+          status: ${{ steps.parse.outputs.status }}
+
+    outputs:
+      structured_output: ${{ steps.answer.outputs.structured_output }}

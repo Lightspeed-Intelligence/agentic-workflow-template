@@ -1,0 +1,137 @@
+# Reusable Workflow: PR Review
+# 自动审查 PR
+name: PR Review (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      use_feishu_notify:
+        description: '是否发送飞书通知'
+        type: boolean
+        default: true
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+      ANTHROPIC_BASE_URL:
+        required: false
+      PAT_TOKEN:
+        required: false
+      FEISHU_WEBHOOK_TOKEN:
+        required: false
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          token: ${{ secrets.PAT_TOKEN || github.token }}
+
+      - name: PR Review with Claude
+        id: review
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          github_token: ${{ github.token }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          use_sticky_comment: true
+          prompt: |
+            执行 `pr-review` skill 审查 PR #${{ github.event.pull_request.number }}。
+
+            Title: ${{ github.event.pull_request.title }}
+            Author: ${{ github.event.pull_request.user.login }}
+          claude_args: |
+            --model opus --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep,Task"
+            --json-schema '{
+              "type": "object",
+              "properties": {
+                "description": {"type": "string", "description": "审查结论一句话摘要，如：代码良好，发现2个小问题"},
+                "conclusion": {"type": "string", "enum": ["APPROVE", "REQUEST_CHANGES", "COMMENT"], "description": "审查结论"},
+                "critical_count": {"type": "integer", "description": "阻塞问题数量"},
+                "important_count": {"type": "integer", "description": "重要建议数量"},
+                "suggestion_count": {"type": "integer", "description": "小问题数量"}
+              },
+              "required": ["description", "conclusion", "critical_count", "important_count", "suggestion_count"]
+            }'
+
+      - name: Output Structured Result
+        if: always()
+        run: |
+          echo "## PR Review Result" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo '${{ steps.review.outputs.structured_output }}' >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Parse Review Output
+        if: always() && inputs.use_feishu_notify
+        id: parse
+        run: |
+          STRUCTURED_OUTPUT='${{ steps.review.outputs.structured_output }}'
+          if [ -n "$STRUCTURED_OUTPUT" ] && [ "$STRUCTURED_OUTPUT" != "null" ]; then
+            CONCLUSION=$(echo "$STRUCTURED_OUTPUT" | jq -r '.conclusion // "UNKNOWN"')
+            DESCRIPTION=$(echo "$STRUCTURED_OUTPUT" | jq -r '.description // "审查完成"')
+            CRITICAL=$(echo "$STRUCTURED_OUTPUT" | jq -r '.critical_count // 0')
+            IMPORTANT=$(echo "$STRUCTURED_OUTPUT" | jq -r '.important_count // 0')
+            SUGGESTION=$(echo "$STRUCTURED_OUTPUT" | jq -r '.suggestion_count // 0')
+          else
+            CONCLUSION="UNKNOWN"
+            DESCRIPTION="未能获取审查结果"
+            CRITICAL=0
+            IMPORTANT=0
+            SUGGESTION=0
+          fi
+
+          case "$CONCLUSION" in
+            "APPROVE") STATUS="success" ;;
+            "REQUEST_CHANGES") STATUS="error" ;;
+            *) STATUS="info" ;;
+          esac
+
+          if [ "${{ job.status }}" != "success" ]; then
+            STATUS="warning"
+            DESCRIPTION="GitHub Action 执行失败"
+          fi
+
+          echo "status=${STATUS}" >> $GITHUB_OUTPUT
+          echo "title=PR 审查: ${CONCLUSION}" >> $GITHUB_OUTPUT
+
+          # 多行输出使用 heredoc
+          {
+            echo 'description<<EOF'
+            echo "**${{ github.repository }}** PR #${{ github.event.pull_request.number }}"
+            echo "*${{ github.event.pull_request.title }}*"
+            echo "${DESCRIPTION}"
+            echo "🔴 ${CRITICAL} | 🟠 ${IMPORTANT} | 🟢 ${SUGGESTION}"
+            echo 'EOF'
+          } >> $GITHUB_OUTPUT
+
+      - name: Checkout Action
+        if: always() && inputs.use_feishu_notify && secrets.FEISHU_WEBHOOK_TOKEN != ''
+        uses: actions/checkout@v5
+        with:
+          repository: vast-enterprise/agentic-workflow-template
+          path: .agentic-actions
+          sparse-checkout: .github/actions
+
+      - name: Notify Feishu
+        if: always() && inputs.use_feishu_notify && secrets.FEISHU_WEBHOOK_TOKEN != ''
+        uses: ./.agentic-actions/.github/actions/feishu-notify
+        with:
+          webhook_token: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
+          title: ${{ steps.parse.outputs.title }}
+          description: ${{ steps.parse.outputs.description }}
+          link_text: '🔗 查看 PR'
+          link_url: ${{ github.event.pull_request.html_url }}
+          status: ${{ steps.parse.outputs.status }}
+
+    outputs:
+      structured_output: ${{ steps.review.outputs.structured_output }}

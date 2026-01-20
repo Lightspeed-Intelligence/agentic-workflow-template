@@ -1,0 +1,59 @@
+# CLAUDE.md 示例
+
+将此内容放入目标仓库的 `CLAUDE.md`。
+
+---
+
+Always answer in 简体中文
+
+<github-action-rules>
+
+## 核心规则
+
+1. **语言**: 所有输出使用简体中文
+2. **单条评论**: 无头环境，所有输出合并为一条评论
+3. **折叠长内容**: 使用 `<details>` 折叠代码、日志、技术细节
+4. **先读文档**: 操作前必须阅读 `llmdoc/` 理解项目
+5. **不重复评论**: 检查是否已评论过，避免重复
+6. **禁止提问**: 无头运行，直接执行，不向用户提问
+
+## llmdoc 结构
+
+```
+llmdoc/
+├── index.md          # 索引，必读
+├── overview/         # 项目概述，必读
+├── guides/           # 操作指南
+├── architecture/     # 架构设计
+└── reference/        # 参考资料
+```
+
+## 链接格式
+
+```
+https://github.com/{owner}/{repo}/blob/{full_sha}/{path}#L{start}-L{end}
+```
+
+- 必须使用完整 commit SHA
+- 行号格式：`#L10-L15`
+
+## Submodule 处理
+
+- 改动只影响 submodule → 只在该 submodule 内提交
+- 多 submodule 改动 → 评论中列出所有 PR 链接
+- 注意各 submodule 的 `llmdoc/`
+
+## 分支命名
+
+- 功能: `feat/vast-github-bot/{short-description}`
+- 修复: `fix/vast-github-bot/{short-description}`
+
+## Issue 关闭
+
+PR body 包含 `Closes #issue_number` 自动关闭 Issue
+
+</github-action-rules>
+
+---
+
+{项目特定的说明和注意事项}

@@ -1,0 +1,63 @@
+# 飞书通知 Composite Action
+# 统一的通知格式：Title + Description + Link
+
+name: 'Feishu Notify'
+description: '发送统一格式的飞书通知'
+
+inputs:
+  webhook_token:
+    description: '飞书 Webhook Token'
+    required: true
+  title:
+    description: '通知标题'
+    required: true
+  description:
+    description: '通知描述 (支持飞书 Markdown)'
+    required: true
+  link_text:
+    description: '链接显示文本'
+    required: true
+  link_url:
+    description: '链接 URL'
+    required: true
+  status:
+    description: '状态类型：success, warning, error, info'
+    required: false
+    default: 'info'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Send Feishu Notification
+      shell: bash
+      run: |
+        # 根据状态设置样式
+        case "${{ inputs.status }}" in
+          "success") EMOJI="✅"; TEMPLATE="green" ;;
+          "warning") EMOJI="⚠️"; TEMPLATE="orange" ;;
+          "error")   EMOJI="❌"; TEMPLATE="red" ;;
+          *)         EMOJI="ℹ️"; TEMPLATE="blue" ;;
+        esac
+
+        # 使用 jq 构建完整 JSON，自动处理转义
+        jq -n \
+          --arg title "${EMOJI} ${{ inputs.title }}" \
+          --arg template "$TEMPLATE" \
+          --arg desc "${{ inputs.description }}" \
+          --arg link_text "${{ inputs.link_text }}" \
+          --arg link_url "${{ inputs.link_url }}" \
+          '{
+            msg_type: "interactive",
+            card: {
+              header: {
+                title: {tag: "plain_text", content: $title},
+                template: $template
+              },
+              elements: [
+                {tag: "div", text: {tag: "lark_md", content: $desc}},
+                {tag: "action", actions: [{tag: "button", text: {tag: "plain_text", content: $link_text}, type: "primary", url: $link_url}]}
+              ]
+            }
+          }' | curl -s -X POST "https://open.feishu.cn/open-apis/bot/v2/hook/${{ inputs.webhook_token }}" \
+            -H "Content-Type: application/json" \
+            -d @-
