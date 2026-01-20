@@ -50,7 +50,7 @@ description: 分析 Bug 类型 Issue, 定位根因, 并对简单 Bug 自动创�
 | **可自动修复** | ✅ 是 / ❌ 否 |
 
 <details>
-<summary><h4>📋 详细分析</h4></summary>
+<summary><h3>📋 详细分析</h3></summary>
 
 **复现路径**:
 1. {步骤}

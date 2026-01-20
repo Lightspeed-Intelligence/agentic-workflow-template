@@ -65,7 +65,7 @@ PR 可能有多次提交，需要支持增量审查：
 {一句话总结}
 
 <details>
-<summary><h4>🔴 阻塞问题 (N)</h4></summary>
+<summary><h3>🔴 阻塞问题 (N)</h3></summary>
 
 - **文件**: `{path}` [代码链接]({github_link})
 - **问题**: {描述}
@@ -74,7 +74,7 @@ PR 可能有多次提交，需要支持增量审查：
 </details>
 
 <details>
-<summary><h4>🟠 重要建议 (N)</h4></summary>
+<summary><h3>🟠 重要建议 (N)</h3></summary>
 
 - **文件**: `{path}`
 - **问题**: {描述}
@@ -83,7 +83,7 @@ PR 可能有多次提交，需要支持增量审查：
 </details>
 
 <details>
-<summary><h4>🟢 小问题 (N)</h4></summary>
+<summary><h3>🟢 小问题 (N)</h3></summary>
 
 - **文件**: `{path}`
 - **问题**: {风格或小建议}
