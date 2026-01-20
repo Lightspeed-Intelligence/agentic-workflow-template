@@ -52,7 +52,7 @@ jobs:
 
             审查完成后必须调用 `gh pr comment ${{ github.event.pull_request.number }} --body "..."` 发表审查结果。
           claude_args: |
-            --model opus --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep,Task"
+            --model opus --allowedTools "Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep,Task,Skill"
             --json-schema '{
               "type": "object",
               "properties": {

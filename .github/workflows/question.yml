@@ -62,7 +62,7 @@ jobs:
 
             完成后必须调用 `gh issue comment ${{ github.event.issue.number }} --body "..."` 发表评论。
           claude_args: |
-            --model opus --allowedTools "Bash(gh issue comment:*),Read,Glob,Grep"
+            --model opus --allowedTools "Bash(gh issue comment:*),Read,Glob,Grep,Skill"
             --json-schema '{
               "type": "object",
               "properties": {
