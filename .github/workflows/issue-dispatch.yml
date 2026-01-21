@@ -133,6 +133,7 @@ jobs:
           repository: vast-enterprise/agentic-workflow-template
           path: .agentic-actions
           sparse-checkout: .github/actions
+          sparse-checkout-cone-mode: false
 
       - name: Notify Feishu
         if: always() && inputs.use_feishu_notify
