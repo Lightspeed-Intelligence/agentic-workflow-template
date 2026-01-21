@@ -125,6 +125,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: vast-enterprise/agentic-workflow-template
+          token: ${{ secrets.PAT_TOKEN || github.token }}
           path: .agentic-actions
           sparse-checkout: .github/actions
           sparse-checkout-cone-mode: false
