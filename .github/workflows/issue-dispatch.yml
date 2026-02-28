@@ -6,7 +6,7 @@ on:
   workflow_call:
     inputs:
       use_feishu_notify:
-        description: '是否发送飞书通知'
+        description: "是否发送飞书通知"
         type: boolean
         default: true
     secrets:
@@ -130,7 +130,7 @@ jobs:
         if: always() && inputs.use_feishu_notify
         uses: actions/checkout@v5
         with:
-          repository: vast-enterprise/agentic-workflow-template
+          repository: Lightspeed-Intelligence/agentic-workflow-template
           ref: main
           token: ${{ secrets.PAT_TOKEN || github.token }}
           path: .agentic-actions
@@ -144,7 +144,7 @@ jobs:
           webhook_token: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
           title: ${{ steps.parse.outputs.title }}
           description: ${{ steps.parse.outputs.description }}
-          link_text: '🔗 查看 Issue'
+          link_text: "🔗 查看 Issue"
           link_url: ${{ github.event.issue.html_url }}
           status: ${{ steps.parse.outputs.status }}
 

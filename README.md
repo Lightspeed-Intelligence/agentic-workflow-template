@@ -7,7 +7,7 @@
 ### 1. 使用模板创建仓库
 
 ```bash
-gh repo create my-project --template vast-enterprise/agentic-workflow-template
+gh repo create my-project --template Lightspeed-Intelligence/agentic-workflow-template
 ```
 
 ### 2. 配置 Secrets
@@ -53,7 +53,7 @@ jobs:
   # Issue 创建/打标签时自动分析
   issue-dispatch:
     if: github.event_name == 'issues'
-    uses: vast-enterprise/agentic-workflow-template/.github/workflows/issue-dispatch.yml@main
+    uses: Lightspeed-Intelligence/agentic-workflow-template/.github/workflows/issue-dispatch.yml@main
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
@@ -63,7 +63,7 @@ jobs:
   # 评论 /impl 或 ok 时实现代码
   implement:
     if: github.event_name == 'issue_comment' && github.event.issue.pull_request == null
-    uses: vast-enterprise/agentic-workflow-template/.github/workflows/implement.yml@main
+    uses: Lightspeed-Intelligence/agentic-workflow-template/.github/workflows/implement.yml@main
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
@@ -73,7 +73,7 @@ jobs:
   # 评论 /ask 或 /q 时回答问题
   question:
     if: github.event_name == 'issue_comment' && github.event.issue.pull_request == null
-    uses: vast-enterprise/agentic-workflow-template/.github/workflows/question.yml@main
+    uses: Lightspeed-Intelligence/agentic-workflow-template/.github/workflows/question.yml@main
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
@@ -83,7 +83,7 @@ jobs:
   # PR 创建/更新时自动审查
   pr-review:
     if: github.event_name == 'pull_request'
-    uses: vast-enterprise/agentic-workflow-template/.github/workflows/pr-review.yml@main
+    uses: Lightspeed-Intelligence/agentic-workflow-template/.github/workflows/pr-review.yml@main
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
@@ -97,23 +97,23 @@ jobs:
 
 ## 工作流
 
-| 工作流 | 触发条件 | 功能 |
-|--------|----------|------|
-| `issue-dispatch` | Issue 创建/打标签 | 根据标签分发到 bug-analyze / feature-review / answer-question |
-| `implement` | 评论 `/impl` 或 `ok` | 实现代码并创建 PR |
-| `question` | 评论 `/ask` `/q` `/?` | 回答技术问题 |
-| `pr-review` | PR 创建/更新 | 代码审查，支持增量审查 |
+| 工作流           | 触发条件              | 功能                                                          |
+| ---------------- | --------------------- | ------------------------------------------------------------- |
+| `issue-dispatch` | Issue 创建/打标签     | 根据标签分发到 bug-analyze / feature-review / answer-question |
+| `implement`      | 评论 `/impl` 或 `ok`  | 实现代码并创建 PR                                             |
+| `question`       | 评论 `/ask` `/q` `/?` | 回答技术问题                                                  |
+| `pr-review`      | PR 创建/更新          | 代码审查，支持增量审查                                        |
 
 ## Skills
 
-| Skill | 描述 | 输出 |
-|-------|------|------|
-| `github-comment` | 基础规范 | 定义评论格式、折叠、链接 |
-| `bug-analyze` | Bug 分析 | 根因定位 + 自动修复 (简单 bug) |
-| `feature-review` | 需求评审 | 成本估算 + 影响分析 (面向产品) |
-| `implement` | 代码实现 | 创建分支 + PR |
-| `pr-review` | PR 审查 | 高信号问题 + 增量审查 |
-| `answer-question` | 问题回答 | 技术咨询 |
+| Skill             | 描述     | 输出                           |
+| ----------------- | -------- | ------------------------------ |
+| `github-comment`  | 基础规范 | 定义评论格式、折叠、链接       |
+| `bug-analyze`     | Bug 分析 | 根因定位 + 自动修复 (简单 bug) |
+| `feature-review`  | 需求评审 | 成本估算 + 影响分析 (面向产品) |
+| `implement`       | 代码实现 | 创建分支 + PR                  |
+| `pr-review`       | PR 审查  | 高信号问题 + 增量审查          |
+| `answer-question` | 问题回答 | 技术咨询                       |
 
 ## 配置项
 
@@ -137,12 +137,12 @@ inputs:
 
 ### Secrets
 
-| Secret | 必需 | 描述 |
-|--------|------|------|
-| `ANTHROPIC_API_KEY` | ✅ | Anthropic API Key |
-| `ANTHROPIC_BASE_URL` | ❌ | 自定义 API 端点 (代理/私有部署) |
-| `PAT_TOKEN` | ❌ | Personal Access Token (私有 submodule 访问) |
-| `FEISHU_WEBHOOK_TOKEN` | ❌ | 飞书机器人 Webhook Token |
+| Secret                 | 必需 | 描述                                        |
+| ---------------------- | ---- | ------------------------------------------- |
+| `ANTHROPIC_API_KEY`    | ✅   | Anthropic API Key                           |
+| `ANTHROPIC_BASE_URL`   | ❌   | 自定义 API 端点 (代理/私有部署)             |
+| `PAT_TOKEN`            | ❌   | Personal Access Token (私有 submodule 访问) |
+| `FEISHU_WEBHOOK_TOKEN` | ❌   | 飞书机器人 Webhook Token                    |
 
 ## 目录结构
 
