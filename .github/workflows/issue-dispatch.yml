@@ -58,16 +58,7 @@ jobs:
             注意: 所有代码链接必须使用 https://github.com/${{ github.repository }}/blob/main/... 格式。
           claude_args: |
             --model opus --allowedTools "Bash(gh issue:*),Bash(gh pr:*),Bash(git:*),Read,Write,Edit,Glob,Grep,Task,Skill"
-            --json-schema '{
-              "type": "object",
-              "properties": {
-                "description": {"type": "string", "description": "执行结果的一句话摘要，用于通知"},
-                "issue_type": {"type": "string", "enum": ["bug", "feature", "question"], "description": "Issue 类型"},
-                "severity": {"type": "string", "enum": ["critical", "high", "medium", "low", "n/a"], "description": "Bug 严重程度"},
-                "cost": {"type": "string", "enum": ["small", "medium", "large", "extra-large", "n/a"], "description": "需求预估成本"}
-              },
-              "required": ["description", "issue_type"]
-            }'
+            --json-schema '{"type":"object","properties":{"description":{"type":"string","description":"执行结果的一句话摘要，用于通知"},"issue_type":{"type":"string","enum":["bug","feature","question"],"description":"Issue 类型"},"severity":{"type":"string","enum":["critical","high","medium","low","n/a"],"description":"Bug 严重程度"},"cost":{"type":"string","enum":["small","medium","large","extra-large","n/a"],"description":"需求预估成本"}},"required":["description","issue_type"]}' "issue_type": {"type": "string", "enum": ["bug", "feature", "question"], "description": "Issue 类型"}, "severity": {"type": "string", "enum": ["critical", "high", "medium", "low", "n/a"], "description": "Bug 严重程度"}, "cost": {"type": "string", "enum": ["small", "medium", "large", "extra-large", "n/a"], "description": "需求预估成本"} }, "required": ["description", "issue_type"] }'
 
       - name: Output Result
         if: always()

@@ -67,13 +67,7 @@ jobs:
             注意: 所有代码链接必须使用 https://github.com/${{ github.repository }}/blob/main/... 格式。
           claude_args: |
             --model opus --allowedTools "Bash(gh issue comment:*),Read,Glob,Grep,Skill"
-            --json-schema '{
-              "type": "object",
-              "properties": {
-                "description": {"type": "string", "description": "回答内容的一句话摘要"}
-              },
-              "required": ["description"]
-            }'
+            --json-schema '{"type":"object","properties":{"description":{"type":"string","description":"回答内容的一句话摘要"}},"required":["description"]}'
 
       - name: Output Result
         if: always()

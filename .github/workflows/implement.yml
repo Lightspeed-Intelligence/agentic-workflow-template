@@ -66,17 +66,7 @@ jobs:
             注意: 所有代码链接必须使用 https://github.com/${{ github.repository }}/blob/main/... 格式。
           claude_args: |
             --model opus --allowedTools "Bash(gh issue:*),Bash(gh pr:*),Bash(git:*),Read,Write,Edit,Glob,Grep,Task,Skill"
-            --json-schema '{
-              "type": "object",
-              "properties": {
-                "description": {"type": "string", "description": "实现结果一句话摘要，如：已创建 PR #123"},
-                "status": {"type": "string", "enum": ["success", "failed", "blocked"], "description": "实现状态"},
-                "branch_name": {"type": "string", "description": "创建的分支名"},
-                "pr_number": {"type": "integer", "description": "PR 编号"},
-                "pr_url": {"type": "string", "description": "PR 链接"}
-              },
-              "required": ["description", "status"]
-            }'
+            --json-schema '{ "type": "object", "properties": { "description": {"type": "string", "description": "实现结果一句话摘要，如：已创建 PR #123"}, "status": {"type": "string", "enum": ["success", "failed", "blocked"], "description": "实现状态"}, "branch_name": {"type": "string", "description": "创建的分支名"}, "pr_number": {"type": "integer", "description": "PR 编号"}, "pr_url": {"type": "string", "description": "PR 链接"} }, "required": ["description", "status"] }'
 
       - name: Output Result
         if: always()
