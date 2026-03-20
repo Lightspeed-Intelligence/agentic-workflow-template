@@ -1,0 +1,114 @@
+# Reusable Workflow: Update LLMDoc
+# 定时自动维护 llmdoc 项目文档，适用于任何包含 llmdoc 的仓库
+name: Update LLMDoc (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      use_feishu_notify:
+        description: "是否发送飞书通知"
+        type: boolean
+        default: true
+      since_period:
+        description: "检查变更的时间范围"
+        type: string
+        default: "24 hours ago"
+      target_branch:
+        description: "目标分支"
+        type: string
+        default: "dev"
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+      ANTHROPIC_BASE_URL:
+        required: false
+      PAT_TOKEN:
+        required: false
+      FEISHU_WEBHOOK_TOKEN:
+        required: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.target_branch }}
+          token: ${{ secrets.PAT_TOKEN || github.token }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Update llmdoc with Claude
+        id: update
+        uses: anthropics/claude-code-action@v1
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+        with:
+          github_token: ${{ secrets.PAT_TOKEN || github.token }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            仓库: ${{ github.repository }}
+            时间范围: ${{ inputs.since_period }}
+            目标分支: ${{ inputs.target_branch }}
+
+            执行 `update-llmdoc` skill，检查过去 ${{ inputs.since_period }} 内 ${{ inputs.target_branch }} 分支的代码变更，分析并更新 llmdoc 文档。
+
+            完成后输出处理结果摘要。
+          claude_args: |
+            --model opus --allowedTools "Bash(git:*),Bash(echo:*),Read,Write,Edit,Glob,Grep,Task,Skill"
+            --json-schema '{"type":"object","properties":{"description":{"type":"string","description":"更新结果一句话摘要"},"total_files_updated":{"type":"number","description":"更新的文档文件总数"}},"required":["description","total_files_updated"]}'
+
+      - name: Output Result
+        if: always()
+        id: parse
+        env:
+          STRUCTURED_OUTPUT: ${{ steps.update.outputs.structured_output }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          echo "## 📚 llmdoc 更新结果" >> $GITHUB_STEP_SUMMARY
+          echo '```json' >> $GITHUB_STEP_SUMMARY
+          echo "$STRUCTURED_OUTPUT" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+          DESCRIPTION=$(echo "$STRUCTURED_OUTPUT" | jq -r '.description // "更新完成"' 2>/dev/null || echo "更新完成")
+          TOTAL=$(echo "$STRUCTURED_OUTPUT" | jq -r '.total_files_updated // 0' 2>/dev/null || echo "0")
+          [ "$TOTAL" -gt 0 ] 2>/dev/null && STATUS="success" || STATUS="info"
+          [ "$JOB_STATUS" != "success" ] && STATUS="warning" && DESCRIPTION="执行异常"
+
+          echo "status=${STATUS}" >> $GITHUB_OUTPUT
+          echo "title=llmdoc 文档更新" >> $GITHUB_OUTPUT
+          echo "description=${DESCRIPTION}" >> $GITHUB_OUTPUT
+
+      - name: Checkout Feishu Action
+        if: always() && inputs.use_feishu_notify
+        uses: actions/checkout@v5
+        with:
+          repository: Lightspeed-Intelligence/agentic-workflow-template
+          ref: main
+          token: ${{ secrets.PAT_TOKEN || github.token }}
+          path: .agentic-actions
+          sparse-checkout: .github/actions
+          sparse-checkout-cone-mode: false
+
+      - name: Notify Feishu
+        if: always() && inputs.use_feishu_notify
+        uses: ./.agentic-actions/.github/actions/feishu-notify
+        with:
+          webhook_token: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
+          title: ${{ steps.parse.outputs.title }}
+          description: ${{ steps.parse.outputs.description }}
+          link_text: "🔗 查看详情"
+          link_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          status: ${{ steps.parse.outputs.status }}
+
+    outputs:
+      structured_output: ${{ steps.update.outputs.structured_output }}
