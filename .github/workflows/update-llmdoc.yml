@@ -33,6 +33,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: write
+      pull-requests: write
       id-token: write
     steps:
       - name: Checkout repository
@@ -64,8 +65,8 @@ jobs:
 
             完成后输出处理结果摘要。
           claude_args: |
-            --model opus --allowedTools "Bash(git:*),Bash(echo:*),Read,Write,Edit,Glob,Grep,Task,Skill"
-            --json-schema '{"type":"object","properties":{"description":{"type":"string","description":"更新结果一句话摘要"},"total_files_updated":{"type":"number","description":"更新的文档文件总数"}},"required":["description","total_files_updated"]}'
+            --model opus --allowedTools "Bash(git:*),Bash(gh:*),Bash(echo:*),Bash(date:*),Read,Write,Edit,Glob,Grep,Task,Skill"
+            --json-schema '{"type":"object","properties":{"description":{"type":"string","description":"更新结果一句话摘要"},"total_files_updated":{"type":"number","description":"更新的文档文件总数"},"pr_url":{"type":"string","description":"创建的 PR 链接，无更新时为空字符串"}},"required":["description","total_files_updated","pr_url"]}'
 
       - name: Output Result
         if: always()
@@ -81,12 +82,14 @@ jobs:
 
           DESCRIPTION=$(echo "$STRUCTURED_OUTPUT" | jq -r '.description // "更新完成"' 2>/dev/null || echo "更新完成")
           TOTAL=$(echo "$STRUCTURED_OUTPUT" | jq -r '.total_files_updated // 0' 2>/dev/null || echo "0")
+          PR_URL=$(echo "$STRUCTURED_OUTPUT" | jq -r '.pr_url // ""' 2>/dev/null || echo "")
           [ "$TOTAL" -gt 0 ] 2>/dev/null && STATUS="success" || STATUS="info"
           [ "$JOB_STATUS" != "success" ] && STATUS="warning" && DESCRIPTION="执行异常"
 
           echo "status=${STATUS}" >> $GITHUB_OUTPUT
           echo "title=llmdoc 文档更新" >> $GITHUB_OUTPUT
           echo "description=${DESCRIPTION}" >> $GITHUB_OUTPUT
+          echo "pr_url=${PR_URL}" >> $GITHUB_OUTPUT
 
       - name: Checkout Feishu Action
         if: always() && inputs.use_feishu_notify
@@ -106,8 +109,8 @@ jobs:
           webhook_token: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
           title: ${{ steps.parse.outputs.title }}
           description: ${{ steps.parse.outputs.description }}
-          link_text: "🔗 查看详情"
-          link_url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          link_text: ${{ steps.parse.outputs.pr_url != '' && '🔗 查看 PR' || '🔗 查看详情' }}
+          link_url: ${{ steps.parse.outputs.pr_url != '' && steps.parse.outputs.pr_url || format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) }}
           status: ${{ steps.parse.outputs.status }}
 
     outputs:
