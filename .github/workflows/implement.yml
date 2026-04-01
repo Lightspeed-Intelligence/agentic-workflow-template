@@ -43,12 +43,13 @@ jobs:
           token: ${{ secrets.PAT_TOKEN || github.token }}
 
       - name: Install pinned Claude Code CLI
+        id: setup_claude
         run: |
           CLAUDE_INSTALL_DIR="$RUNNER_TEMP/claude-code-2.1.80"
           rm -rf "$CLAUDE_INSTALL_DIR"
           npm install --prefix "$CLAUDE_INSTALL_DIR" @anthropic-ai/claude-code@2.1.80
           CLAUDE_CODE_PATH="$CLAUDE_INSTALL_DIR/node_modules/.bin/claude"
-          echo "CLAUDE_CODE_PATH=$CLAUDE_CODE_PATH" >> $GITHUB_ENV
+          echo "path=$CLAUDE_CODE_PATH" >> $GITHUB_OUTPUT
           "$CLAUDE_CODE_PATH" --version
 
       - name: Implement with Claude
@@ -60,7 +61,7 @@ jobs:
         with:
           github_token: ${{ secrets.PAT_TOKEN || github.token }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          path_to_claude_code_executable: ${{ env.CLAUDE_CODE_PATH }}
+          path_to_claude_code_executable: ${{ steps.setup_claude.outputs.path }}
           prompt: |
             仓库: ${{ github.repository }}
             仓库 URL: https://github.com/${{ github.repository }}
