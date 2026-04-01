@@ -45,14 +45,19 @@ jobs:
 
       - name: Install pinned Claude Code CLI
         run: |
-          npm install -g @anthropic-ai/claude-code@2.1.80
-          echo "CLAUDE_CODE_PATH=$(which claude)" >> $GITHUB_ENV
+          CLAUDE_INSTALL_DIR="$RUNNER_TEMP/claude-code-2.1.80"
+          rm -rf "$CLAUDE_INSTALL_DIR"
+          npm install --prefix "$CLAUDE_INSTALL_DIR" @anthropic-ai/claude-code@2.1.80
+          CLAUDE_CODE_PATH="$CLAUDE_INSTALL_DIR/node_modules/.bin/claude"
+          echo "CLAUDE_CODE_PATH=$CLAUDE_CODE_PATH" >> $GITHUB_ENV
+          "$CLAUDE_CODE_PATH" --version
 
       - name: Answer Question with Claude
         id: answer
         uses: anthropics/claude-code-action@725b9c36f61150e9be5b9ec02289a9a0cfc21c04
         env:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          DISABLE_AUTOUPDATER: "1"
         with:
           github_token: ${{ github.token }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
