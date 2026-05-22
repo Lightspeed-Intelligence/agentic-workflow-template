@@ -50,6 +50,7 @@ jobs:
         uses: anthropics/claude-code-action@e7b588b6eaa5263c2e7c6c7b34a29e190d32ee68
         env:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
           DISABLE_AUTOUPDATER: "1"
         with:
           github_token: ${{ github.token }}
