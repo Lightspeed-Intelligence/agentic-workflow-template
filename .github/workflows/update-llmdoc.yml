@@ -60,7 +60,7 @@ jobs:
 
       - name: Update llmdoc with Claude
         id: update
-        uses: anthropics/claude-code-action@e7b588b6eaa5263c2e7c6c7b34a29e190d32ee68
+        uses: anthropics/claude-code-action@c0deb8ed7f234ce70586d54b0685c253f5407f72
         env:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           ANTHROPIC_CUSTOM_HEADERS: "Authorization: Bearer ${{ secrets.ANTHROPIC_API_KEY }}"
@@ -78,7 +78,7 @@ jobs:
 
             完成后输出处理结果摘要。
           claude_args: |
-            --model opus --allowedTools "Bash(git:*),Bash(gh:*),Bash(echo:*),Bash(date:*),Read,Write,Edit,Glob,Grep,Task,Skill"
+            --model claude-opus-4-8 --allowedTools "Bash(git:*),Bash(gh:*),Bash(echo:*),Bash(date:*),Read,Write,Edit,Glob,Grep,Task,Skill"
             --json-schema '{"type":"object","properties":{"description":{"type":"string","description":"更新结果一句话摘要"},"total_files_updated":{"type":"number","description":"更新的文档文件总数"},"pr_url":{"type":"string","description":"创建的 PR 链接，无更新时为空字符串"}},"required":["description","total_files_updated","pr_url"]}'
 
       - name: Output Result
