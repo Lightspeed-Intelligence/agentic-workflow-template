@@ -47,7 +47,7 @@ jobs:
 
       - name: Analyze Issue with Claude
         id: analyze
-        uses: anthropics/claude-code-action@e7b588b6eaa5263c2e7c6c7b34a29e190d32ee68
+        uses: anthropics/claude-code-action@c0deb8ed7f234ce70586d54b0685c253f5407f72
         env:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           ANTHROPIC_CUSTOM_HEADERS: "Authorization: Bearer ${{ secrets.ANTHROPIC_API_KEY }}"
@@ -70,7 +70,7 @@ jobs:
             完成分析后必须调用 `gh issue comment ${{ github.event.issue.number }} --body "..."` 发表评论。
             注意: 所有代码链接必须使用 https://github.com/${{ github.repository }}/blob/main/... 格式。
           claude_args: |
-            --model opus --allowedTools "Bash(gh issue:*),Bash(gh pr:*),Bash(git:*),Read,Write,Edit,Glob,Grep,Task,Skill"
+            --model claude-opus-4-8 --allowedTools "Bash(gh issue:*),Bash(gh pr:*),Bash(git:*),Read,Write,Edit,Glob,Grep,Task,Skill"
             --json-schema '{"type":"object","properties":{"description":{"type":"string","description":"执行结果的一句话摘要，用于通知"},"issue_type":{"type":"string","enum":["bug","feature","question"],"description":"Issue 类型"},"severity":{"type":"string","enum":["critical","high","medium","low","n/a"],"description":"Bug 严重程度"},"cost":{"type":"string","enum":["small","medium","large","extra-large","n/a"],"description":"需求预估成本"}},"required":["description","issue_type"]}'
 
       - name: Output Result
