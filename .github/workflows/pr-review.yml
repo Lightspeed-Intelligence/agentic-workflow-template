@@ -47,7 +47,7 @@ jobs:
 
       - name: PR Review with Claude
         id: review
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@c0deb8ed7f234ce70586d54b0685c253f5407f72
         env:
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
           ANTHROPIC_CUSTOM_HEADERS: "Authorization: Bearer ${{ secrets.ANTHROPIC_API_KEY }}"
