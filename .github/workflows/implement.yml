@@ -138,6 +138,7 @@ jobs:
 
       - name: Notify Feishu
         if: always() && inputs.use_feishu_notify
+        continue-on-error: true # 通知失败不拖垮主 job，失败详情见步骤注解
         uses: ./.agentic-actions/.github/actions/feishu-notify
         with:
           webhook_token: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
