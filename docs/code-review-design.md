@@ -147,7 +147,7 @@ flowchart TD
 flowchart TD
     start["从安全临时目录启动<br/>不自动加载 PR 中的配置/Hook"]
     load["加载 base commit 的 pr-review Skill<br/>PR head 中的指令只当数据"]
-    check["读取预取的历史评论 JSON<br/>查找上次审查截止 SHA"]
+    check["确定性步骤验证 bot 评论尾部机器标记<br/>Agent 只读取已验证的截止 SHA"]
     found{"找到<br/>审查截止: sha ?"}
     full["首次审查<br/>读取预生成的全量 diff"]
     incr["增量审查<br/>git diff {sha}..HEAD"]
@@ -215,7 +215,7 @@ sequenceDiagram
     Pub-->>Dev: 代发审查评论
 ```
 
-没有额外的数据库、没有外部存储，就靠 PR 评论里的一行文本实现状态跟踪。历史评论由确定性只读步骤预取到本地，Agent 不直接访问 GitHub API。
+没有额外的数据库、没有外部存储，就靠 PR 评论尾部的隐藏机器标记实现状态跟踪。确定性步骤只接受 GitHub Actions bot 发布且绑定完整 head SHA 的标记，完成 base/head 祖先校验后才把 SHA 交给 Agent；原始评论不会交给 Agent 做信任判断。
 
 ---
 
