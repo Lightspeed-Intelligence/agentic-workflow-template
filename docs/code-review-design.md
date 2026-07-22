@@ -4,7 +4,7 @@
 
 ## 一句话说清楚
 
-我们在 GitHub 上接了一个 AI（Claude），让它像团队成员一样自动帮忙干活：PR 提上去它自动审代码，Issue 建出来它自动分析，评论里喊一声 `/impl` 它还能直接写代码交 PR。
+我们在 GitHub 上接入了 Codex 和 Claude Code，让它们像团队成员一样自动帮忙干活：PR 提上去由 Codex 优先审代码，Codex 失败时 Claude Code 自动接手；Issue 建出来仍可自动分析，评论里喊一声 `/impl` 还能直接写代码交 PR。
 
 本文主要讲 **Code Review** 这部分。
 
@@ -19,16 +19,18 @@ sequenceDiagram
     participant Dev as 开发者
     participant GH as GitHub
     participant CI as GitHub Actions
-    participant AI as Claude (AI)
+    participant AI as Codex / Claude Code
+    participant Pub as 发布 Job
     participant FS as 飞书群
 
     Dev->>GH: 提交 PR
     GH->>CI: 触发 pull_request 事件
-    CI->>AI: 启动 Claude Code Action
-    AI->>GH: 读取 PR diff + 代码
+    CI->>AI: 先启动 Codex；失败才启动 Claude Code
+    AI->>AI: 读取本地 PR diff + 代码
     AI->>AI: 按 Skill 规则审查
-    AI->>GH: 发表审查评论
-    AI->>CI: 返回结构化 JSON
+    AI->>CI: 返回结构化 JSON（不操作 GitHub）
+    CI->>Pub: 传递审查结果 artifact
+    Pub->>GH: 校验后发表审查评论
     CI->>FS: 推送飞书通知卡片
 ```
 
@@ -121,52 +123,60 @@ question:
 
 ```mermaid
 flowchart TD
-    A["Step 1: Checkout<br/>拉取完整代码 (fetch-depth: 0)<br/>包括 submodule，用 PAT_TOKEN 跨仓库"]
-    B["Step 2: Claude Code Action<br/>核心步骤，启动 AI 审查"]
-    C["Step 3: 输出到 GitHub Step Summary<br/>JSON 写到 Action 日志页"]
-    D["Step 4: 解析结果，映射通知状态<br/>APPROVE → 绿 / REQUEST_CHANGES → 红 / COMMENT → 蓝"]
-    E["Step 5: 飞书通知<br/>发卡片到群里，带颜色和 PR 链接"]
+    A["Step 1: 只读 Checkout<br/>固定 PR head/base SHA<br/>不持久化 Git 凭据、不传 PAT"]
+    B["Step 2: 准备可信输入<br/>base commit 的 Skill + 本地 diff<br/>历史评论由只读步骤预取"]
+    C["Step 3: Codex + GPT-5.6-sol<br/>完整本地执行权限"]
+    D{"Codex 成功?"}
+    E["Step 4: 独立 runner<br/>Claude Code + Fable-5 fallback"]
+    F["Step 5: 上传结构化结果 artifact"]
+    G["Step 6: 独立发布 Job<br/>校验 JSON 后代发 PR 评论"]
+    H["Step 7: Step Summary + 飞书通知"]
 
-    A --> B --> C --> D --> E
+    A --> B --> C --> D
+    D -->|是| F
+    D -->|否| E --> F
+    F --> G --> H
 
-    style B fill:#fff3e0,stroke:#FF9800,stroke-width:2px
+    style C fill:#fff3e0,stroke:#FF9800,stroke-width:2px
+    style E fill:#e8eaf6,stroke:#3F51B5,stroke-width:2px
 ```
 
-其中 **Step 2** 是 AI 实际干活的地方，内部逻辑如下：
+其中 **Step 3/4** 是 Agent 实际干活的地方，内部逻辑如下：
 
 ```mermaid
 flowchart TD
-    start["接收 PR 信息<br/>(编号、标题、作者)"]
-    load["加载 pr-review Skill<br/>(.claude/skills/pr-review/SKILL.md)"]
-    check["gh pr view --comments<br/>查找历史审查评论"]
+    start["从安全临时目录启动<br/>不自动加载 PR 中的配置/Hook"]
+    load["加载 base commit 的 pr-review Skill<br/>PR head 中的指令只当数据"]
+    check["读取预取的历史评论 JSON<br/>查找上次审查截止 SHA"]
     found{"找到<br/>审查截止: sha ?"}
-    full["首次审查<br/>gh pr diff (全量)"]
+    full["首次审查<br/>读取预生成的全量 diff"]
     incr["增量审查<br/>git diff {sha}..HEAD"]
     review["逐文件审查代码<br/>标记高信号问题"]
-    comment["gh pr comment<br/>发表审查评论<br/>(嵌入本次截止 SHA)"]
-    json["返回结构化 JSON"]
+    json["返回结构化 JSON<br/>包含待发布 comment_body"]
+    publish["发布 Job 校验结果<br/>gh pr comment 代发"]
 
     start --> load --> check --> found
     found -->|"没找到"| full
     found -->|"找到了"| incr
     full --> review
     incr --> review
-    review --> comment --> json
+    review --> json --> publish
 
     style found fill:#fff9c4,stroke:#FFC107
     style review fill:#c8e6c9,stroke:#4CAF50
 ```
 
-Claude 可以使用的工具有严格的白名单：
+两个 Agent 的权限分成“本地运行环境”和“GitHub 仓库资源”两层：
 
-| 工具 | 用途 | 权限性质 |
-|------|------|----------|
-| `gh pr comment` | 发表 PR 评论 | 写（仅评论） |
-| `gh pr diff` / `gh pr view` | 查看 PR 信息 | 只读 |
-| `Read` / `Glob` / `Grep` | 读取仓库代码 | 只读 |
-| `Task` / `Skill` | 调用子能力 | 内部 |
+| 能力 | Agent 权限 | 说明 |
+|------|------------|------|
+| 本地 Shell / 文件 / 测试工具 | 完整 | runner 是一次性环境，可自由构建、测试和分析 |
+| PR head checkout | 本地可读写 | 仅影响临时 runner，不会写回仓库 |
+| GitHub contents / pull requests | job token 只读 | token 仅供 checkout 和输入准备步骤使用 |
+| `gh pr comment` 等写操作 | 无 | Agent 进程不接收 GitHub token 或 PAT |
+| 发布审查评论 | 独立发布 Job | 唯一拥有 `pull-requests: write` 的非 Agent job |
 
-注意：**没给 Write 和 Edit 权限**——审查时 AI 只能看、不能改你的代码。
+Agent 可以修改临时工作区，但既没有可持久化的 Git 凭据，也没有 GitHub 写 token，因此不能把影响推回仓库。
 
 ---
 
@@ -181,35 +191,37 @@ Claude 可以使用的工具有严格的白名单：
 ```mermaid
 sequenceDiagram
     participant Dev as 开发者
-    participant AI as Claude
+    participant AI as Codex / Claude Code
+    participant Pub as 发布 Job
 
     Note over Dev,AI: 第一次 push
     Dev->>AI: PR opened / synchronize
     AI->>AI: 没找到历史审查记录 → 全量审查
-    AI-->>Dev: 评论: "审查截止: aaa111"
+    AI-->>Pub: 输出包含 "审查截止: aaa111"
+    Pub-->>Dev: 代发审查评论
 
     Note over Dev,AI: 第二次 push
     Dev->>AI: PR synchronize
     AI->>AI: 找到 "审查截止: aaa111"
     AI->>AI: git diff aaa111..HEAD (只看新改动)
-    AI-->>Dev: 评论: "审查截止: bbb222"
+    AI-->>Pub: 输出包含 "审查截止: bbb222"
+    Pub-->>Dev: 代发审查评论
 
     Note over Dev,AI: 第三次 push
     Dev->>AI: PR synchronize
     AI->>AI: 找到 "审查截止: bbb222"
     AI->>AI: git diff bbb222..HEAD
-    AI-->>Dev: 评论: "审查截止: ccc333"
+    AI-->>Pub: 输出包含 "审查截止: ccc333"
+    Pub-->>Dev: 代发审查评论
 ```
 
-没有额外的数据库、没有外部存储，就靠 PR 评论里的一行文本实现了状态跟踪。简单但有效。
-
-另外，`use_sticky_comment: true` 这个配置保证 Claude 在同一个 PR 里只维护一条评论（更新而非新建），PR 的评论区不会被刷屏。
+没有额外的数据库、没有外部存储，就靠 PR 评论里的一行文本实现状态跟踪。历史评论由确定性只读步骤预取到本地，Agent 不直接访问 GitHub API。
 
 ---
 
 ## Skill 系统：AI 的"工作手册"
 
-Claude 不是裸跑的，它的行为受 `.claude/skills/` 目录下的 Markdown 文件约束。你可以把 Skill 理解成给 AI 写的 SOP（标准作业流程）。
+Agent 的审查行为受 `.claude/skills/` 目录下的 Markdown 文件约束。为避免 PR 自己篡改规则，审查 workflow 固定从 base commit 读取 Skill；可以把 Skill 理解成给 AI 写的 SOP（标准作业流程）。
 
 ```mermaid
 graph TD
@@ -260,7 +272,7 @@ graph LR
 
 ## 结构化输出：JSON 驱动下游
 
-Claude 的审查结果不只是一段评论文本，还有一份结构化 JSON：
+Agent 的审查结果是一份结构化 JSON，评论正文也只是其中的待发布数据：
 
 ```json
 {
@@ -268,16 +280,21 @@ Claude 的审查结果不只是一段评论文本，还有一份结构化 JSON�
   "description": "代码良好，发现2个小问题",
   "critical_count": 0,
   "important_count": 1,
-  "suggestion_count": 2
+  "suggestion_count": 2,
+  "comment_body": "## PR 审查……",
+  "reviewer": "codex",
+  "model": "gpt-5.6-sol"
 }
 ```
 
-这个 JSON 通过 `--json-schema` 参数在调用时约束，Claude 必须按格式输出。有了结构化数据，后续的通知和状态判断都能自动处理，不用去解析自然语言。
+这个 JSON 通过 CLI 的 JSON Schema 参数约束，并在发布 Job 中再次用 `jq` 校验枚举、计数、正文长度和 reviewer/model 组合。校验通过后才允许评论和通知步骤消费。
 
 ```mermaid
 flowchart LR
-    AI["Claude 输出 JSON"] --> summary["GitHub Step Summary<br/>(给人看的日志)"]
-    AI --> jq["shell 脚本 jq 解析"]
+    AI["Codex / Claude Code 输出 JSON"] --> artifact["短期 artifact<br/>跨权限边界传递"]
+    artifact --> jq["发布 Job 用 jq 校验"]
+    jq --> comment["gh pr comment 代发"]
+    jq --> summary["GitHub Step Summary<br/>(给人看的日志)"]
     jq --> color["conclusion → 卡片颜色"]
     jq --> desc["description → 卡片正文"]
     jq --> count["*_count → 问题统计"]
@@ -286,6 +303,7 @@ flowchart LR
     count --> feishu
 
     style AI fill:#fff3e0,stroke:#FF9800
+    style comment fill:#c8e6c9,stroke:#4CAF50
     style feishu fill:#c8e6c9,stroke:#4CAF50
 ```
 
@@ -325,27 +343,33 @@ flowchart LR
 
 ```mermaid
 graph TD
-    subgraph tokens["Token 分工"]
-        gt["GITHUB_TOKEN (自动)<br/>当前仓库范围内的默认操作"]
-        pat["PAT_TOKEN (手动配置)<br/>跨仓库 checkout + 推送代码"]
-        ak["ANTHROPIC_API_KEY<br/>调用 Claude API"]
+    subgraph review_jobs["Agent Jobs"]
+        local["✅ 完整本地执行权限"]
+        read["✅ contents / pull-requests: read"]
+        no_pat["❌ PAT_TOKEN"]
+        no_write["❌ GitHub 写 token"]
+    end
+
+    subgraph publish_job["发布 Job（不运行 Agent）"]
+        validate["✅ 校验结构化 artifact"]
+        pr_write["✅ pull-requests: write"]
+        comment["✅ 代发固定目标 PR 评论"]
+    end
+
+    subgraph tokens["其它凭据"]
+        ak["ANTHROPIC_API_KEY<br/>仅注入 Agent 调用模型"]
         fw["FEISHU_WEBHOOK_TOKEN<br/>发飞书通知"]
     end
 
-    subgraph review_perm["Code Review 时 Claude 的权限"]
-        read["✅ 读代码 (Read/Glob/Grep)"]
-        ghpr["✅ 操作 PR (comment/diff/view)"]
-        write["❌ 写文件 (Write/Edit)"]
-        push["❌ 推送代码 (git push)"]
-    end
+    review_jobs -->|结构化 artifact| publish_job
 
-    style write fill:#ffcdd2,stroke:#f44336
-    style push fill:#ffcdd2,stroke:#f44336
+    style no_pat fill:#ffcdd2,stroke:#f44336
+    style no_write fill:#ffcdd2,stroke:#f44336
     style read fill:#c8e6c9,stroke:#4CAF50
-    style ghpr fill:#c8e6c9,stroke:#4CAF50
+    style pr_write fill:#c8e6c9,stroke:#4CAF50
 ```
 
-**审查时 AI 是只读的**，不可能意外改动你的代码。
+**Agent 对 runner 是高权限的，对 GitHub 仓库资源是只读的。** 即使 Agent 修改了临时 checkout，也没有凭据推送；评论等外部副作用只能经过独立发布 Job。
 
 ---
 
@@ -355,7 +379,7 @@ graph TD
 
 ```mermaid
 flowchart TD
-    A["1️⃣ 配置 Secrets<br/>GitHub 仓库 Settings → Secrets<br/>添加 ANTHROPIC_API_KEY / PAT_TOKEN 等"]
+    A["1️⃣ 配置 Secrets<br/>PR 审查只需 ANTHROPIC_API_KEY<br/>不向审查 workflow 传 PAT"]
     B["2️⃣ 添加 ci.yml<br/>复制到 .github/workflows/<br/>改一下远程引用路径即可"]
     C["3️⃣ 复制 Skills<br/>将 .claude/skills/ 目录放到仓库根目录<br/>AI 运行时需要读这些工作手册"]
     D["🎉 完成<br/>不需要装任何依赖<br/>不需要改项目代码<br/>纯配置，PR 一提就自动审查"]
@@ -409,7 +433,8 @@ flowchart TD
 
 - **模板仓库 + Reusable Workflow** — 改一处，全局生效，多仓库接入成本极低
 - **Skill = Markdown SOP** — AI 的行为规则以 Markdown 定义，任何人都能读懂和修改
-- **评论里存状态** — 增量审查不需要外部存储，靠 commit SHA 串联上下文
+- **评论里存状态** — 增量审查不需要外部存储，历史评论由只读步骤预取
 - **结构化输出** — JSON Schema 让 AI 的结果可编程，驱动通知和统计
-- **最小权限** — 审查时 AI 只能读、不能写，避免意外修改
+- **权限分层** — Agent 对临时 runner 高权限、对 GitHub 只读；副作用集中到确定性发布 Job
+- **主备隔离** — Codex 优先，失败时 Claude Code 在新 runner 上接手，避免环境污染
 - **高信号策略** — 宁可漏报也不误报，维护团队对自动审查的信任

@@ -87,7 +87,6 @@ jobs:
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
-      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
 ```
 
@@ -137,11 +136,13 @@ inputs:
 # pr-review.yml
 inputs:
   use_feishu_notify: true
-  # 追加放行的工具模式（逗号分隔），供带 submodule 等特殊结构的仓库使用。
-  # 注意只枚举只读子命令，不要用 'Bash(git -C xxx:*)' 通配——会连 push 一起放行。
-  # 值会拼进双引号字符串，只允许工具模式字符，不得含双引号等特殊字符
-  extra_allowed_tools: 'Bash(git -C tipsy-app log:*),Bash(git -C tipsy-app diff:*)'
+  # 兼容旧调用方保留，不再生效：Codex / Claude Code 均拥有完整本地执行权限。
+  extra_allowed_tools: ''
 ```
+
+PR 审查优先使用 Codex + GPT-5.6-sol，Codex 链路失败时自动切换到
+Claude Code + Fable-5。两个 Agent 所在 job 只有仓库只读权限，不接收 PAT 或
+GitHub token；审查评论由单独的发布 job 校验结构化结果后代发。
 
 ### Secrets
 
@@ -149,7 +150,7 @@ inputs:
 | ---------------------- | ---- | ------------------------------------------- |
 | `ANTHROPIC_API_KEY`    | ✅   | Anthropic API Key                           |
 | `ANTHROPIC_BASE_URL`   | ❌   | 自定义 API 端点 (代理/私有部署)             |
-| `PAT_TOKEN`            | ❌   | Personal Access Token (私有 submodule 访问) |
+| `PAT_TOKEN`            | ❌   | 其它写入型 workflow 的私有 submodule 访问；PR 审查不接收 |
 | `FEISHU_WEBHOOK_TOKEN` | ❌   | 飞书机器人 Webhook Token                    |
 
 ## 目录结构
