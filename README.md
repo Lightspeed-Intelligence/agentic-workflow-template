@@ -138,7 +138,8 @@ inputs:
 inputs:
   use_feishu_notify: true
   # 追加放行的工具模式（逗号分隔），供带 submodule 等特殊结构的仓库使用。
-  # 注意只枚举只读子命令，不要用 'Bash(git -C xxx:*)' 通配——会连 push 一起放行
+  # 注意只枚举只读子命令，不要用 'Bash(git -C xxx:*)' 通配——会连 push 一起放行。
+  # 值会拼进双引号字符串，只允许工具模式字符，不得含双引号等特殊字符
   extra_allowed_tools: 'Bash(git -C tipsy-app log:*),Bash(git -C tipsy-app diff:*)'
 ```
 

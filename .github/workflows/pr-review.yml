@@ -10,7 +10,7 @@ on:
         type: boolean
         default: true
       extra_allowed_tools:
-        description: "追加到 --allowedTools 的工具模式（逗号分隔），如 'Bash(git -C tipsy-app:*)'，供调用方按需放行仓库特有命令"
+        description: "追加到 --allowedTools 的工具模式（逗号分隔），如 'Bash(git -C tipsy-app:*)'，供调用方按需放行仓库特有命令。值会拼进双引号字符串，只允许工具模式字符，不得含双引号等特殊字符"
         type: string
         default: ""
     secrets:
