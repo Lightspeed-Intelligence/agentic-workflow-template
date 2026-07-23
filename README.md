@@ -1,6 +1,6 @@
 # Agentic Workflow Template
 
-基于 Claude Code Action 的 GitHub 自动化工作流模板。自动处理 Issue 分析、需求评审、Bug 修复、代码实现和 PR 审查。
+基于 GitHub Actions 的自动化工作流模板。自动处理 Issue 分析、需求评审、Bug 修复、代码实现和 PR 审查；PR 审查直接运行固定版本的 Codex 与 Claude Code CLI。
 
 ## 快速开始
 

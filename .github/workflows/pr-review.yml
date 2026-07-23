@@ -192,9 +192,9 @@ jobs:
             - < "$RUNNER_TEMP/review-prompt.txt"
 
           test -s "$LAST_MSG"
-          mkdir -p .review-output
+          mkdir -p review-output
           jq -c '. + {reviewer: "codex", model: "gpt-5.6-sol"}' \
-            "$LAST_MSG" > .review-output/review.json
+            "$LAST_MSG" > review-output/review.json
           jq -e '
             (.description | type == "string" and length > 0 and length <= 500 and (test("[\\r\\n]") | not)) and
             (.conclusion | IN("APPROVE", "REQUEST_CHANGES", "COMMENT")) and
@@ -207,13 +207,13 @@ jobs:
               (.conclusion == "REQUEST_CHANGES" and (.critical_count > 0 or .important_count > 0)) or
               (.conclusion == "COMMENT" and .critical_count == 0 and .important_count == 0)
             )
-          ' .review-output/review.json > /dev/null
+          ' review-output/review.json > /dev/null
 
       - name: Upload Codex review result
         uses: actions/upload-artifact@v4
         with:
           name: review-result-codex-${{ github.run_attempt }}
-          path: .review-output/review.json
+          path: review-output/review.json
           if-no-files-found: error
           retention-days: 1
 
@@ -373,14 +373,14 @@ jobs:
             < "$RUNNER_TEMP/review-prompt.txt" > "$RAW_RESULT"
 
           jq -e '(.is_error? // false) == false' "$RAW_RESULT" > /dev/null
-          mkdir -p "$GITHUB_WORKSPACE/.review-output"
+          mkdir -p "$GITHUB_WORKSPACE/review-output"
           jq -c '
             if (.structured_output? | type) == "object" then .structured_output
             elif (has("conclusion") and has("comment_body")) then .
             else error("Claude 未产出结构化审查结果")
             end
             | . + {reviewer: "claude", model: "fable-5"}
-          ' "$RAW_RESULT" > "$GITHUB_WORKSPACE/.review-output/review.json"
+          ' "$RAW_RESULT" > "$GITHUB_WORKSPACE/review-output/review.json"
           jq -e '
             (.description | type == "string" and length > 0 and length <= 500 and (test("[\\r\\n]") | not)) and
             (.conclusion | IN("APPROVE", "REQUEST_CHANGES", "COMMENT")) and
@@ -393,13 +393,13 @@ jobs:
               (.conclusion == "REQUEST_CHANGES" and (.critical_count > 0 or .important_count > 0)) or
               (.conclusion == "COMMENT" and .critical_count == 0 and .important_count == 0)
             )
-          ' "$GITHUB_WORKSPACE/.review-output/review.json" > /dev/null
+          ' "$GITHUB_WORKSPACE/review-output/review.json" > /dev/null
 
       - name: Upload Claude review result
         uses: actions/upload-artifact@v4
         with:
           name: review-result-claude-${{ github.run_attempt }}
-          path: .review-output/review.json
+          path: review-output/review.json
           if-no-files-found: error
           retention-days: 1
 
