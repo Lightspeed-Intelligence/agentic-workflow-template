@@ -18,9 +18,11 @@ pull_request event
 
 ## Trust Classes
 
-- Trusted reviewer policy: exact base-SHA checkout of `pr-review/SKILL.md`, `review-sop.md`,
-  `output-format.md` and `github-comment/SKILL.md` after sanitizing `.trusted-base`.
-- History-preparation code comes only from that base-SHA checkout. If the script is absent from
+- Trusted reviewer policy: immutable template-repository revision checkout of `pr-review/SKILL.md`,
+  `review-sop.md`, `output-format.md` and `github-comment/SKILL.md` into sanitized `.trusted-policy`.
+- Consumer repositories do not need to copy the split reviewer policy files. Their exact base-SHA
+  checkout in `.trusted-base` supplies only the optional history-preparation script.
+- History-preparation code comes only from the consumer base-SHA checkout. If the script is absent from
   base, no PR-head preparation code runs; deterministic workflow commands select a complete
   `base...head` review without historical state.
 - Reviewed/untrusted data: PR metadata, commits, full head checkout, docs, selected diff and historical comment body.
@@ -58,6 +60,8 @@ has full local access and the input cannot grant GitHub credentials.
   a strict ancestor of head; otherwise fail closed to full review.
 - Publisher appends the machine-readable state marker after model prose; the Agent cannot choose it.
 - Codex success requires process success, schema/count validation and structured `review_status=COMPLETE`; `INCOMPLETE` is an exit-zero soft-failure signal.
+- `INCOMPLETE` is reserved for inaccessible core review inputs or inability to perform meaningful
+  code analysis. An unavailable project-specific test/tool is recorded but is not sufficient alone.
 - Claude runs only when the whole Codex job is non-success and uses a fresh runner.
 - The artifact includes `comment_body`; public `structured_output` removes it but retains reviewer/model identity.
 - Publisher revalidates `review_status=COMPLETE`, type, length, count/conclusion semantics and the reviewer/model pair before commenting.

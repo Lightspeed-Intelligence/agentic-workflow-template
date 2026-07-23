@@ -38,6 +38,9 @@ Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even w
 
 ## Review Range and History
 
+- Reviewer Skill/SOP/output policy comes from immutable template revision
+  `dbf05344dfc582d63a18442f81a370926a445700`, not from the consumer repository. Consumer bases may
+  therefore use older/no split policy layout without breaking review.
 - History preparation uses only the base-SHA script. When base has no copy, deterministic workflow
   commands generate full `base...head` inputs with reason `trusted_preparation_unavailable`; PR-head
   preparation code is never executed.
@@ -59,6 +62,8 @@ Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even w
 ## Failure Semantics
 
 - Any Codex job non-success, including structured `review_status=INCOMPLETE`, triggers Claude.
+- `INCOMPLETE` means core diff/worktree/context is inaccessible or meaningful code review cannot be
+  performed. A project-specific test unavailable because of runner tooling is disclosed, not alone fatal.
 - Findings are successful review results; `REQUEST_CHANGES` does not trigger fallback.
 - If neither reviewer succeeds, notification may run but the publisher job ultimately fails.
 - Feishu is best effort and cannot turn a failed review into success or a successful review into failure.

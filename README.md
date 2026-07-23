@@ -152,6 +152,12 @@ Claude Code + Fable-5。两个 Agent 所在 job 只有仓库只读权限，Agent
 GitHub token；可选 PAT 仅由 checkout 读取跨仓库私有 submodule，且不持久化。审查评论由单独的发布 job 校验结构化结果后代发。Codex 即使退出码为
 0，只要结构化 `review_status` 为 `INCOMPLETE`，也会被视为软失败并触发 fallback；
 自由文本中的错误字样不会被误当成运行状态。
+只有核心 diff/工作树不可访问或无法完成有意义的代码审查时才应标记
+`INCOMPLETE`；某个项目测试因 runner 缺少工具或版本而未运行，应记录但不会单独使审查失败。
+
+PR 审查规范由 reusable workflow 所在的 template 仓库以固定 commit 提供；
+调用方仓库无需复制 `review-sop.md` 或 `output-format.md`。调用方 base checkout
+只用于获取可选的历史审查准备脚本，缺失时安全降级为完整审查。
 
 每次 Agent 启动前，确定性准备步骤会使用 job 的只读 token 读取最新一条由
 `github-actions` App 发布、且带有 publisher 生成的结构化状态标记的历史 review。
