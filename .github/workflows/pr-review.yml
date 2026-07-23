@@ -1,8 +1,11 @@
 # Reusable Workflow: PR Review
 # 自动审查 PR
-# 主链路: Codex CLI (gpt-5.6-sol)，按最小权限运行——只读沙箱、不持有 GitHub token、
-# 审查规范从可信 base 分支读取、评论由确定性 shell 步骤校验后发布。
-# Codex 链路报错时自动 fallback 到 Claude Code (claude-opus-4-8)。
+# 主链路: Codex CLI (gpt-5.6-sol)。Codex 不持有 GitHub token、不写回仓库，
+# 审查规范从可信 base 分支读取、评论由确定性 shell 步骤校验后发布——即便 PR
+# 内容藏有恶意指令也无法借 Codex 之手动用凭据。（沙箱用 danger-full-access：
+# GitHub 托管 runner 上 Codex 自带 bubblewrap 无法建 loopback 网络，只读沙箱起不来；
+# 「禁改源码」改由 pr-review skill 逻辑层约束。）
+# Codex 链路报错、或输出命中软失败哨兵时，自动 fallback 到 Claude Code (claude-opus-4-8)。
 name: PR Review (Reusable)
 
 on:
@@ -153,8 +156,13 @@ jobs:
           PROMPT_EOF
 
           LAST_MSG="$RUNNER_TEMP/review-last-message.json"
+          # GitHub 托管 runner 上 Codex 自带的 bubblewrap 无法初始化 loopback 网络
+          # (bwrap: loopback: Failed RTM_NEWADDR: Operation not permitted)，read-only
+          # 沙箱会因此启动失败、连本地文件都读不到。改用 danger-full-access 跳过沙箱：
+          # Codex 仍不持有 GitHub token（评论由后续确定性步骤代发）、不写回仓库，
+          # 「禁改源码」由 pr-review skill 在逻辑层约束。
           "${{ steps.setup_codex.outputs.path }}" exec \
-            --sandbox read-only \
+            --sandbox danger-full-access \
             --output-schema "$SCHEMA_FILE" \
             --output-last-message "$LAST_MSG" \
             - < "$PROMPT_FILE"
@@ -168,7 +176,7 @@ jobs:
       - name: Publish Codex review comment
         id: publish_codex
         if: steps.review_codex.outcome == 'success'
-        continue-on-error: true # 发布失败（校验不过/网络）交由 Claude fallback 接手
+        continue-on-error: true # 发布失败（校验不过/软失败/网络）交由 Claude fallback 接手
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -176,6 +184,19 @@ jobs:
           # 发布前的确定性校验：结论必须是合法枚举值，评论正文非空
           jq -e '.conclusion | IN("APPROVE", "REQUEST_CHANGES", "COMMENT")' "$STRUCTURED" > /dev/null
           jq -e '.comment_body | length > 0' "$STRUCTURED" > /dev/null
+
+          # 软失败哨兵：Codex 可能吐出「合法 JSON + 正文自述审查未完成」（如沙箱/环境
+          # 读文件失败）。这种情况退出码为 0，但评论毫无审查价值，若直接发布会挂一个
+          # 绿勾 +「审查未完成」评论、且不触发 fallback。命中哨兵即判失败，转 Claude。
+          # 哨兵刻意收紧到环境错误特征串（标题「审查未完成」+ 罕见技术错误），避免
+          # 误伤正文里正常引用「无法读取 Redis」之类业务描述的真实审查。
+          BODY=$(jq -r '.comment_body' "$STRUCTURED")
+          DESC=$(jq -r '.description // ""' "$STRUCTURED")
+          if printf '%s\n%s' "$DESC" "$BODY" | grep -qiE '(^|\n)#*\s*审查未完成|未能完成.{0,20}审查|执行环境.{0,10}(失败|无法|错误)|RTM_NEWADDR|Operation not permitted|bwrap|bubblewrap|sandbox (setup |init )?(failed|error)'; then
+            echo "::warning::Codex 输出命中软失败哨兵，判定审查未真正完成，转 Claude fallback"
+            exit 1
+          fi
+
           jq -r '.comment_body' "$STRUCTURED" > "$RUNNER_TEMP/review-comment.md"
           gh pr comment ${{ github.event.pull_request.number }} \
             --repo ${{ github.repository }} \
