@@ -15,6 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/pr-review.yml"
+CALLER = ROOT / ".github/workflows/ci.yml"
 PREPARE = ROOT / ".github/scripts/pr-review/prepare-review-history.sh"
 
 
@@ -281,6 +282,22 @@ def test_extra_allowed_tools(workflow: str) -> None:
     assert not any(accepts(value) for value in invalid)
 
 
+def test_model_secret_routing(workflow: str, caller: str) -> None:
+    for name in ("OPENAI_API_KEY", "OPENAI_BASE_URL"):
+        assert re.search(rf'^      {name}:\n        required: false$', workflow, re.MULTILINE)
+        assert caller.count(f'{name}: ${{{{ secrets.{name} }}}}') == 1
+
+    assert workflow.count(
+        'OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || secrets.ANTHROPIC_API_KEY }}'
+    ) == 1
+    assert workflow.count(
+        'OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL || secrets.ANTHROPIC_BASE_URL }}'
+    ) == 1
+    assert 'BASE_URL="${OPENAI_BASE_URL:-https://llm.fantacy.live}"' in workflow
+    assert 'OPENAI_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}' not in workflow
+    assert 'BASE_URL="${ANTHROPIC_BASE_URL:-https://llm.fantacy.live}"' in workflow
+
+
 def test_prepare_script_selection(workflow: str, repo_info: dict[str, str]) -> None:
     pattern = re.compile(
         r'^          prepare_script="\$GITHUB_WORKSPACE/\.trusted-base/'
@@ -333,6 +350,7 @@ def test_prepare_script_selection(workflow: str, repo_info: dict[str, str]) -> N
 
 def main() -> None:
     workflow = WORKFLOW.read_text()
+    caller = CALLER.read_text()
     run(["bash", "-n", str(PREPARE)])
     with tempfile.TemporaryDirectory(prefix="pr-review-repo-") as tmp_name:
         repo_info = make_repo(Path(tmp_name))
@@ -341,6 +359,7 @@ def main() -> None:
     test_schemas(workflow)
     test_publisher_gate(workflow)
     test_extra_allowed_tools(workflow)
+    test_model_secret_routing(workflow, caller)
     print("pr-review contract fixtures passed")
 
 

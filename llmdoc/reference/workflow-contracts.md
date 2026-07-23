@@ -18,7 +18,9 @@
 ## Secrets
 
 - Required model credential: `ANTHROPIC_API_KEY`.
-- Optional: `ANTHROPIC_BASE_URL`, `FEISHU_WEBHOOK_TOKEN`.
+- Optional: `ANTHROPIC_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `FEISHU_WEBHOOK_TOKEN`.
+- The optional `OPENAI_*` pair applies to PR-review Codex only and falls back per value to the
+  corresponding `ANTHROPIC_*` secret; other workflows and Claude continue using `ANTHROPIC_*`.
 - `PAT_TOKEN` is for write-capable/private-submodule workflows. PR review declares it only for caller compatibility and must never reference or forward it.
 
 ## Submodules

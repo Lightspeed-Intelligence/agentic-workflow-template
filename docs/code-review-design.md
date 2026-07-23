@@ -368,7 +368,8 @@ graph TD
     end
 
     subgraph tokens["其它凭据"]
-        ak["ANTHROPIC_API_KEY<br/>仅注入 Agent 调用模型"]
+        ak["ANTHROPIC_API_KEY<br/>Claude 与 Codex 默认凭据"]
+        oak["OPENAI_API_KEY（可选）<br/>Codex 独立凭据"]
         fw["FEISHU_WEBHOOK_TOKEN<br/>发飞书通知"]
     end
 
@@ -390,7 +391,7 @@ graph TD
 
 ```mermaid
 flowchart TD
-    A["1️⃣ 配置 Secrets<br/>PR 审查只需 ANTHROPIC_API_KEY<br/>不向审查 workflow 传 PAT"]
+    A["1️⃣ 配置 Secrets<br/>最少只需 ANTHROPIC_API_KEY<br/>可选为 Codex 单独配置 OPENAI_*<br/>不向审查 workflow 传 PAT"]
     B["2️⃣ 添加 ci.yml<br/>复制到 .github/workflows/<br/>改一下远程引用路径即可"]
     C["3️⃣ 复制 Skills<br/>将 .claude/skills/ 目录放到仓库根目录<br/>AI 运行时需要读这些工作手册"]
     D["🎉 完成<br/>不需要装任何依赖<br/>不需要改项目代码<br/>纯配置，PR 一提就自动审查"]

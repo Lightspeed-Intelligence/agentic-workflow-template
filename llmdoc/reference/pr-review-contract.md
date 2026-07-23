@@ -11,7 +11,10 @@
 - `use_feishu_notify` boolean, default `true`.
 - `extra_allowed_tools` comma-separated Claude tool patterns; only normalized repository-relative
   `git -C` plus `diff`, `log`, `show`, `status`, `rev-parse`, `merge-base` or `ls-files`.
-- `ANTHROPIC_API_KEY` required; base URL and Feishu webhook optional.
+- `ANTHROPIC_API_KEY` required; `ANTHROPIC_BASE_URL` optional.
+- `OPENAI_API_KEY` and `OPENAI_BASE_URL` optional. Codex resolves each independently as
+  `OPENAI_*` first, then the corresponding `ANTHROPIC_*` value; Claude always uses `ANTHROPIC_*`.
+- Feishu webhook optional.
 - `PAT_TOKEN` optional declaration for compatibility, with zero workflow references.
 
 ## Artifact Schema
