@@ -1,14 +1,27 @@
 # PR Review Output Format
 
-The final answer must be the GitHub PR comment body in Simplified Chinese.
+The model's final response remains the workflow-defined JSON object. Its `comment_body` field
+must contain the complete GitHub PR comment body in Simplified Chinese; do not emit Markdown
+outside that JSON object.
+
+## Review Completion Status
+
+Set the top-level `review_status` field independently from the finding conclusion:
+
+- `COMPLETE`: the full required review was actually completed.
+- `INCOMPLETE`: an environment, tool, access, or execution limitation prevented the full review,
+  even if the process can still return schema-valid JSON.
+
+Never report `COMPLETE` merely because a JSON response can be produced. An `INCOMPLETE` result is
+a workflow control signal: it is not publishable and causes the isolated fallback reviewer to run.
 
 ## Conclusion Values
 
-Choose by the overall merge judgment (see `references/review-sop.md`), not by a raw count of findings. Use exactly one:
+Use exactly one, preserving the workflow's count/conclusion contract:
 
-- `APPROVE`: no genuine blocker. Non-blocking MINOR/NIT items, or MAJOR items that are recommendations rather than correctness/safety failures, do not by themselves prevent APPROVE. Finding nothing on a low-risk PR is a normal APPROVE.
-- `REQUEST_CHANGES`: at least one genuine BLOCKER exists — code that can break correctness, safety, data integrity, security, or deployment as written. A pile of low-severity or gate-driven items does not add up to REQUEST_CHANGES when no single item is merge-blocking.
-- `COMMENT`: no blocker, but there are worthwhile suggestions or unresolved questions the author should weigh.
+- `APPROVE`: BLOCKER、MAJOR、MINOR、NIT 和开放问题均为 0。
+- `REQUEST_CHANGES`: 至少存在一个 BLOCKER 或 MAJOR。
+- `COMMENT`: 没有 BLOCKER/MAJOR，但存在 MINOR、NIT 或需要记录的开放问题。
 
 ## Severity
 
@@ -17,18 +30,23 @@ Choose by the overall merge judgment (see `references/review-sop.md`), not by a 
 - **MINOR**: useful cleanup or narrow risk.
 - **NIT**: small style or clarity issue worth mentioning only if it improves the patch.
 
+结构化计数必须与正文一致：BLOCKER → `critical_count`，MAJOR →
+`important_count`，MINOR/NIT → `suggestion_count`。开放问题不得伪装成已确认 finding。
+
 ## Required Structure
 
 ```markdown
-## Codex PR 审查
+## PR 审查
 
 | 项目 | 结果 |
 |------|------|
 | **结论** | APPROVE / REQUEST_CHANGES / COMMENT |
+| **审查模式** | full / incremental |
 | **审查范围** | `{range}` |
-| **审查截止** | `{current_full_sha}` |
+| **Head commit** | `{current_full_sha}` |
 
-审查截止: {current_full_sha}
+严格使用 workflow 提供的审查模式和范围；cutoff 与历史状态由 workflow 的确定性步骤认证，
+reviewer 不自行从评论推断。Head SHA 仅用于固定当前树和代码链接。
 
 {一句话总结}
 
@@ -37,10 +55,10 @@ Choose by the overall merge judgment (see `references/review-sop.md`), not by a 
 {完整性声明: 据本轮审查，以上为本 PR 已知的全部阻塞级风险 / 仍有需作者确认的开放问题见下}
 
 <details>
-<summary><h3>历史问题复核 (仅增量审查时)</h3></summary>
+<summary><h3>历史问题复核</h3></summary>
 
-- {对上一轮每个 BLOCKER/MAJOR 逐条给出: 已解决 / 仍存在 / 部分解决}
-- 首次审查填「无」
+- {对上一轮每个 finding 逐条给出: 已解决 / 仍存在 / 部分解决；增量模式必须填写}
+- 没有可信历史 review 时填「无」
 
 </details>
 

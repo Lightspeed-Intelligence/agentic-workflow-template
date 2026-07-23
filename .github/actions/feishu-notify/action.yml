@@ -30,9 +30,16 @@ runs:
   steps:
     - name: Send Feishu Notification
       shell: bash
+      env:
+        INPUT_WEBHOOK_TOKEN: ${{ inputs.webhook_token }}
+        INPUT_TITLE: ${{ inputs.title }}
+        INPUT_DESCRIPTION: ${{ inputs.description }}
+        INPUT_LINK_TEXT: ${{ inputs.link_text }}
+        INPUT_LINK_URL: ${{ inputs.link_url }}
+        INPUT_STATUS: ${{ inputs.status }}
       run: |
         # 根据状态设置样式
-        case "${{ inputs.status }}" in
+        case "$INPUT_STATUS" in
           "success") EMOJI="✅"; TEMPLATE="green" ;;
           "warning") EMOJI="⚠️"; TEMPLATE="orange" ;;
           "error")   EMOJI="❌"; TEMPLATE="red" ;;
@@ -41,11 +48,11 @@ runs:
 
         # 使用 jq 构建完整 JSON，自动处理转义
         PAYLOAD=$(jq -n \
-          --arg title "${EMOJI} ${{ inputs.title }}" \
+          --arg title "${EMOJI} $INPUT_TITLE" \
           --arg template "$TEMPLATE" \
-          --arg desc "${{ inputs.description }}" \
-          --arg link_text "${{ inputs.link_text }}" \
-          --arg link_url "${{ inputs.link_url }}" \
+          --arg desc "$INPUT_DESCRIPTION" \
+          --arg link_text "$INPUT_LINK_TEXT" \
+          --arg link_url "$INPUT_LINK_URL" \
           '{
             msg_type: "interactive",
             card: {
@@ -69,7 +76,7 @@ runs:
         RESP=""
         for i in $(seq 1 "$MAX_ATTEMPTS"); do
           sleep "${DELAYS[$((i-1))]}"
-          RESP=$(curl -sS --max-time 15 -X POST "https://open.feishu.cn/open-apis/bot/v2/hook/${{ inputs.webhook_token }}" \
+          RESP=$(curl -sS --max-time 15 -X POST "https://open.feishu.cn/open-apis/bot/v2/hook/${INPUT_WEBHOOK_TOKEN}" \
             -H "Content-Type: application/json" \
             -d "$PAYLOAD" || true)
           CODE=$(jq -r '.code // empty' <<<"$RESP" 2>/dev/null || true)

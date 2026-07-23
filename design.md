@@ -10,7 +10,7 @@
    - 影响半径 (包括线上的功能)
    - 开发的主要难点
 
-4. pr-review: 自动 review PR, 根据 PR 的内容给出评论, 自动 review PR, 存在多次提交的情况, 所以每次 review 的时候都需要记录下 review 的截止 commit, 不能重复 review, 如果存在增量 commit 的情况, 应该 review 增量的commit
+4. pr-review: 自动 review PR；每次覆盖完整 `base...head` diff，不查询或依赖历史评论状态，Agent 只生成评论正文，由独立发布步骤代发
 5. answer-question: 如果并不是需求, 也不是 bug, 那么就回答问题, 例如回答用户咨询, 回答用户提问, 回答用户技术探讨, 最通用的模式, 方案调研的时候应该也是用这个skill
 6. github-comment: 强调在 issue/ pr 中 comment 的时候要考虑可读性, 应该进行折叠
 7. 在 任何情况下, 如果 impl 或者在 issue 中完成了修复, 那么应该及时关闭 issue
@@ -19,7 +19,7 @@
 
 1. issue-dispathch: 根据 issue 的 tag, 调用不同的 skill, 例如 bug-analyze, feature-review, answer-question
 2. implement: 如果用户评论 `/impl` 或者 "ok, OK, Ok, oK", 那么就调用 implement skill, 自动实现代码, 并且推送到对应仓库中
-3. pr-review: 自动 review PR, 根据 PR 的内容给出评论, 自动 review PR, 存在多次提交的情况, 所以每次 review 的时候都需要记录下 review 的截止 commit, 不能重复 review, 如果存在增量 commit 的情况, 应该 review 增量的commit
+3. pr-review: 自动 review PR；每次覆盖完整 `base...head` diff，不把历史评论作为审查状态
 4. question: 如果用户评论 `/ask , /question, /q , /?`, 那么就调用 question skill, 根据上下文回答问题
 
 同时需要注意, 如果存在 submodule 的情况下, 如果改动只影响了 submodule, 那么在 commit的时候, 只需要提交 submodule 的改动, 而不是整个仓库的改动

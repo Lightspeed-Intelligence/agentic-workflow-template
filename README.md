@@ -1,6 +1,6 @@
 # Agentic Workflow Template
 
-基于 Claude Code Action 的 GitHub 自动化工作流模板。自动处理 Issue 分析、需求评审、Bug 修复、代码实现和 PR 审查。
+基于 GitHub Actions 的自动化工作流模板。自动处理 Issue 分析、需求评审、Bug 修复、代码实现和 PR 审查；PR 审查直接运行固定版本的 Codex 与 Claude Code CLI。
 
 ## 快速开始
 
@@ -87,7 +87,6 @@ jobs:
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
-      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
 ```
 
@@ -102,7 +101,7 @@ jobs:
 | `issue-dispatch` | Issue 创建/打标签     | 根据标签分发到 bug-analyze / feature-review / answer-question |
 | `implement`      | 评论 `/impl` 或 `ok`  | 实现代码并创建 PR                                             |
 | `question`       | 评论 `/ask` `/q` `/?` | 回答技术问题                                                  |
-| `pr-review`      | PR 创建/更新          | 代码审查，支持增量审查                                        |
+| `pr-review`      | PR 创建/更新          | 风险分级审查；默认完整 diff，可信的 1–3 个小问题修复可走增量   |
 
 ## Skills
 
@@ -112,7 +111,7 @@ jobs:
 | `bug-analyze`     | Bug 分析 | 根因定位 + 自动修复 (简单 bug) |
 | `feature-review`  | 需求评审 | 成本估算 + 影响分析 (面向产品) |
 | `implement`       | 代码实现 | 创建分支 + PR                  |
-| `pr-review`       | PR 审查  | 高信号问题 + 增量审查          |
+| `pr-review`       | PR 审查  | 高信号问题 + 风险分级全量/增量审查 |
 | `answer-question` | 问题回答 | 技术咨询                       |
 
 ## 配置项
@@ -137,11 +136,26 @@ inputs:
 # pr-review.yml
 inputs:
   use_feishu_notify: true
-  # 追加放行的工具模式（逗号分隔），供带 submodule 等特殊结构的仓库使用。
-  # 注意只枚举只读子命令，不要用 'Bash(git -C xxx:*)' 通配——会连 push 一起放行。
-  # 值会拼进双引号字符串，只允许工具模式字符，不得含双引号等特殊字符
-  extra_allowed_tools: 'Bash(git -C tipsy-app log:*),Bash(git -C tipsy-app diff:*)'
+  # 可选：Claude fallback 的仓库特定只读 Git 工具模式；不得放行 git -C <path>:*。
+  extra_allowed_tools: 'Bash(git -C tipsy-app diff:*),Bash(git -C tipsy-app log:*)'
 ```
+
+PR 审查优先使用 Codex + GPT-5.6-sol，Codex 链路失败时自动切换到
+Claude Code + Fable-5。两个 Agent 所在 job 只有仓库只读权限，不接收 PAT 或
+GitHub token；审查评论由单独的发布 job 校验结构化结果后代发。Codex 即使退出码为
+0，只要结构化 `review_status` 为 `INCOMPLETE`，也会被视为软失败并触发 fallback；
+自由文本中的错误字样不会被误当成运行状态。
+
+每次 Agent 启动前，确定性准备步骤会使用 job 的只读 token 读取最新一条由
+`github-actions` App 发布、且带有 publisher 生成的结构化状态标记的历史 review。
+Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有 BLOCKER/MAJOR、恰有
+1–3 个 MINOR/NIT，且历史 head 是当前 head 的祖先时，才审查 `cutoff..head` 增量并
+逐条验证旧问题；其它情况一律审查完整 `base...head`。
+
+`extra_allowed_tools` 只接受 `git -C <安全路径>` 下的 `diff`、`log`、`show`、
+`status`、`rev-parse`、`merge-base` 或 `ls-files` 模式。它用于声明 monorepo/submodule
+中的额外只读工具提示；Agent 已有完整本地执行权限，因此它不构成安全边界，真正的
+边界仍是 Agent job 的只读 token 和不向 Agent 进程注入 GitHub/PAT 凭据。
 
 ### Secrets
 
@@ -149,7 +163,7 @@ inputs:
 | ---------------------- | ---- | ------------------------------------------- |
 | `ANTHROPIC_API_KEY`    | ✅   | Anthropic API Key                           |
 | `ANTHROPIC_BASE_URL`   | ❌   | 自定义 API 端点 (代理/私有部署)             |
-| `PAT_TOKEN`            | ❌   | Personal Access Token (私有 submodule 访问) |
+| `PAT_TOKEN`            | ❌   | 其它写入型 workflow 的私有 submodule 访问；PR 审查不接收 |
 | `FEISHU_WEBHOOK_TOKEN` | ❌   | 飞书机器人 Webhook Token                    |
 
 ## 目录结构
@@ -170,12 +184,13 @@ inputs:
 │       ├── bug-analyze/
 │       ├── feature-review/
 │       ├── implement/
-│       ├── pr-review/
+│       ├── pr-review/       # 入口 + references/review-sop.md、output-format.md
 │       └── answer-question/
 ├── scripts/                 # Submodule 管理脚本
 │   ├── init.sh
 │   ├── status.sh
 │   └── update-all.sh
+├── llmdoc/                  # Agent 启动上下文、架构、指南、契约与项目记忆
 ├── CLAUDE.md.example        # CLAUDE.md 示例
 └── design.md                # 设计文档
 ```
@@ -205,10 +220,13 @@ inputs:
 // pr-review
 {
   "description": "审查结论摘要",
+  "review_status": "COMPLETE | INCOMPLETE",
   "conclusion": "APPROVE | REQUEST_CHANGES | COMMENT",
   "critical_count": 0,
   "important_count": 1,
-  "suggestion_count": 2
+  "suggestion_count": 2,
+  "reviewer": "codex | claude",
+  "model": "gpt-5.6-sol | fable-5"
 }
 
 // question
@@ -245,5 +263,5 @@ inputs:
 
 1. **llmdoc 优先** - Agent 会先读取 `llmdoc/` 理解项目
 2. **评论折叠** - 长内容使用 `<details>` 折叠
-3. **增量审查** - PR 审查会记录 commit SHA，支持增量
+3. **可信小增量** - 只有经准备步骤认证的 1–3 个小问题修复走增量，其余全部审查完整 diff
 4. **高信号** - 只标记确定的问题，避免误报
