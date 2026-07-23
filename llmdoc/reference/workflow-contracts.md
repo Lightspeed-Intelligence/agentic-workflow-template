@@ -15,6 +15,9 @@
 `.github/workflows/ci.yml` listens to Issue `opened`, Issue-comment `created`, and PR
 `opened/synchronize/reopened`. It does not currently call `update-llmdoc.yml`.
 
+Reusable workflow refs are resolved when a caller run is created. A rerun retains that resolved
+revision; after updating a moving ref, use a fresh matching event/run to consume the new revision.
+
 ## Secrets
 
 - Required model credential: `ANTHROPIC_API_KEY`.
@@ -28,6 +31,9 @@
 
 Recursive checkout and `scripts/init.sh`, `scripts/status.sh`, `scripts/update-all.sh` support optional
 consumer submodules. This template currently has no tracked `.gitmodules`.
+
+PR-review private cross-repository submodules require `PAT_TOKEN` with read access. The token is used
+only by PR-head `actions/checkout`, with credential persistence disabled, and is absent from Agents.
 
 ## Sources of Truth
 

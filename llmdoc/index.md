@@ -26,6 +26,8 @@
 - `llmdoc/reference/pr-review-contract.md`: exact PR-review inputs, models, schema and failure semantics.
 - `llmdoc/memory/decisions/001-pr-review-authority-separation.md`: durable authority-separation decision.
 - `llmdoc/memory/reflections/bounded-independent-review.md`: lesson from an unbounded review/evidence loop.
+- `llmdoc/memory/reflections/reusable-pr-review-integration-regressions.md`: lessons from trust bootstrap,
+  private submodules, legacy consumers, provider routing and reusable-workflow reruns.
 - `llmdoc/memory/doc-gaps.md`: unresolved documentation and automation gaps.
 
 ## Routing Rules

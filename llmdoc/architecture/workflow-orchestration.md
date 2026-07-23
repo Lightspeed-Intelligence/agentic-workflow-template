@@ -19,7 +19,8 @@ copying Agent logic.
 
 1. A caller repository owns the event trigger and grants the maximum authority any called workflow may use.
 2. The reusable workflow narrows authority per job and applies its keyword/draft gate.
-3. The Agent reads the caller checkout plus the relevant Skill and returns structured output.
+3. The Agent reads the caller checkout plus the relevant Skill and returns structured output. PR
+   review obtains its policy from an immutable template revision; consumers do not distribute it.
 4. Each workflow either publishes directly (write-oriented Issue/implementation tasks) or delegates publication to a deterministic job (PR review).
 5. Optional Feishu notification reports the result but is never the source of workflow truth.
 
@@ -29,6 +30,8 @@ copying Agent logic.
 - PR review has a stricter write boundary than Issue-oriented workflows; do not generalize one policy to all tasks.
 - Workflow YAML, action YAML and tracked Skills are executable contracts; README/design/llmdoc must follow them.
 - Submodules are optional consumer topology even though checkouts and helper scripts support them.
+- A GitHub Actions rerun retains the reusable-workflow revision resolved by the original run. A
+  newly merged template fix at a moving ref requires a fresh caller event/run for validation.
 
 ## Related Docs
 

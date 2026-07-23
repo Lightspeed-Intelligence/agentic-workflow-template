@@ -14,8 +14,10 @@ must not be able to drive repository writes or obtain PAT/GitHub write credentia
 - Run Codex and Claude in separate disposable, locally unrestricted reviewer jobs with read-only GitHub permissions.
 - Do not inject GitHub/PAT credentials into Agent processes and do not persist checkout credentials.
 - Transfer only validated structured artifacts to a separate non-Agent publisher with PR-write authority.
-- Use base-pinned reviewer rules and full event-pinned diffs by default. Permit a narrow incremental
-  exception only from publisher-generated, preparation-validated Bot state for fixes to 1–3 small findings.
+- Use immutable template-revision-pinned reviewer rules and full event-pinned diffs by default.
+  Consumer-base code may prepare authenticated history but cannot supply template policy. Permit a
+  narrow incremental exception only from publisher-generated, preparation-validated Bot state for
+  fixes to 1–3 small findings.
 
 ## Consequences
 

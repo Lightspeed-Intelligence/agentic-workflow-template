@@ -53,6 +53,13 @@ Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even w
 - Missing, malformed, stale, current-head, non-ancestor, zero-finding, important-finding or more-than-three-small-finding state selects full `base...head` review.
 - The historical body remains untrusted data. The Agent receives `review-history.json`, never the GitHub token.
 
+## Reusable Workflow Resolution
+
+- A new caller run that references `@main` resolves the then-current template commit.
+- Re-running an existing Actions run reuses the template commit resolved by its original attempt;
+  it does not pick up later changes to `main`.
+- Validate a merged template fix with a fresh PR event/new run, not with **Re-run jobs** on the old run.
+
 ## Artifacts and Output
 
 - Reviewer artifacts: `review-result-codex` or `review-result-claude`, path `review-output/review.json`, overwrite enabled, one-day retention.

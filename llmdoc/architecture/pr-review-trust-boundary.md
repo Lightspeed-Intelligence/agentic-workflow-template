@@ -40,6 +40,8 @@ pull_request event
 - Codex prefers optional `OPENAI_API_KEY` and `OPENAI_BASE_URL`; each missing value independently
   falls back to its `ANTHROPIC_*` counterpart. Claude receives only the `ANTHROPIC_*` pair.
 - `PAT_TOKEN` is forwarded by callers only for checkout, with `github.token` as the fallback.
+- Only PR-head checkout may use that PAT fallback. Consumer-base history and immutable template-policy
+  checkouts use `github.token`; all checkout credentials are removed before Agent execution.
 - `publish`: receives GitHub PR-write authority and optional Feishu webhook, but no model key and no PR-head checkout.
 
 ## Local Privilege
@@ -75,6 +77,8 @@ has full local access and the input cannot grant GitHub credentials.
   repository control-plane convention, not cryptographic provenance. Strict marker/schema/ancestry
   validation and full-review fallback limit this residual risk.
 - Schema and validation logic are duplicated across reviewer/publisher blocks and must be changed together.
+- The immutable policy SHA is manually advanced. Policy source edits do not affect runtime until the
+  reusable workflow deliberately pins a revision containing them.
 
 ## Sources of Truth
 
@@ -82,4 +86,4 @@ has full local access and the input cannot grant GitHub credentials.
 - `.github/scripts/pr-review/prepare-review-history.sh`: base-pinned history authentication and range selection.
 - `scripts/test-pr-review-contract.py`: tracked offline truth-table fixtures run by CI.
 - `.github/workflows/ci.yml`: local trigger and secret forwarding.
-- `.claude/skills/pr-review/`: reviewer behavior and comment contract.
+- `.claude/skills/pr-review/`: policy authoring source; runtime uses the exact revision pinned by the workflow.
