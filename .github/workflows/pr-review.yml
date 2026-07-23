@@ -223,9 +223,14 @@ jobs:
           # CLI 偶尔会以 0 退出并返回结构合法、但明确表示环境导致审查未完成的正文。
           # 将窄化的环境故障信号视为主链路失败，使独立 Claude job 接手。
           jq -e '
-            [(.description // ""), (.comment_body // "")] | join("\n") |
-            test("(^|\\n)#{0,6}[[:space:]]*审查未完成|未能完成.{0,20}审查|无法(完成|继续).{0,20}审查|执行环境.{0,10}(失败|无法|错误).{0,40}(审查|读取|执行)|sandbox (setup |init )?(failed|error)"; "im") |
-            not
+            [(.description // ""), (.comment_body // "")] | join("\n") as $text |
+            (
+              ($text | test("(^|\\n)#{0,6}[[:space:]]*审查未完成|未能完成.{0,20}审查|无法(完成|继续).{0,20}审查|执行环境.{0,10}(失败|无法|错误).{0,40}(审查|读取|执行)"; "im")) or
+              (
+                ($text | test("sandbox (setup |init )?(failed|error)"; "im")) and
+                ($text | test("((unable|cannot|can.t|could not|failed) to (complete|continue|finish|perform)[[:space:]]+(the |a )?(code )?review|(code )?review (could not|cannot|can.t|failed to) be completed)"; "im"))
+              )
+            ) | not
           ' review-output/review.json > /dev/null
 
       - name: Upload Codex review result
