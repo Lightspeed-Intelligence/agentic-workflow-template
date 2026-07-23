@@ -300,9 +300,9 @@ def test_model_secret_routing(workflow: str, caller: str) -> None:
 
 def test_checkout_credentials(workflow: str, caller: str) -> None:
     checkout_token = 'token: ${{ secrets.PAT_TOKEN || github.token }}'
-    assert workflow.count(checkout_token) == 4
-    assert workflow.count('token: ${{ github.token }}') == 2
-    assert workflow.count('secrets.PAT_TOKEN') == 4
+    assert workflow.count(checkout_token) == 2
+    assert workflow.count('token: ${{ github.token }}') == 4
+    assert workflow.count('secrets.PAT_TOKEN') == 2
     assert workflow.count('persist-credentials: false') == 6
     assert caller.count('PAT_TOKEN: ${{ secrets.PAT_TOKEN }}') == 4
 

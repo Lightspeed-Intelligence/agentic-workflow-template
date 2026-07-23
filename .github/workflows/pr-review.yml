@@ -82,7 +82,7 @@ jobs:
             .claude/skills/github-comment
           sparse-checkout-cone-mode: false
           persist-credentials: false
-          token: ${{ secrets.PAT_TOKEN || github.token }}
+          token: ${{ github.token }}
 
       - name: Prepare trusted review inputs
         env:
@@ -322,7 +322,7 @@ jobs:
             .claude/skills/github-comment
           sparse-checkout-cone-mode: false
           persist-credentials: false
-          token: ${{ secrets.PAT_TOKEN || github.token }}
+          token: ${{ github.token }}
 
       - name: Prepare trusted review inputs
         env:
