@@ -252,10 +252,10 @@ Agent 的审查结果是一份结构化 JSON，评论正文也只是其中的待
 
 ```json
 {
-  "conclusion": "APPROVE",
-  "description": "代码良好，发现2个小问题",
+  "conclusion": "COMMENT",
+  "description": "代码良好，发现 2 个小问题",
   "critical_count": 0,
-  "important_count": 1,
+  "important_count": 0,
   "suggestion_count": 2,
   "comment_body": "## PR 审查……",
   "reviewer": "codex",
