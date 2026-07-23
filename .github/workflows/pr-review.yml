@@ -402,6 +402,12 @@ jobs:
           SAFE_ROOT="$RUNNER_TEMP/claude-review-root"
           EXTRA_TOOL_ARGS=()
           if [ -n "$EXTRA_ALLOWED_TOOLS" ]; then
+            case "$EXTRA_ALLOWED_TOOLS" in
+              *$'\n'*|*$'\r'*)
+                echo "::error::extra_allowed_tools 不允许换行符"
+                exit 1
+                ;;
+            esac
             IFS=',' read -ra TOOL_PATTERNS <<< "$EXTRA_ALLOWED_TOOLS"
             for pattern in "${TOOL_PATTERNS[@]}"; do
               # 仅接受仓库子目录上的只读 Git 子命令。禁止覆盖整个 `git -C`
