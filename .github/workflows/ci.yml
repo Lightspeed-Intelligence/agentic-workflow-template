@@ -17,6 +17,20 @@ permissions:
   id-token: write
 
 jobs:
+  pr-review-contract:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout contract tests
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Test PR review contract
+        run: python3 scripts/test-pr-review-contract.py
+
   issue-dispatch:
     if: github.event_name == 'issues'
     uses: ./.github/workflows/issue-dispatch.yml

@@ -69,5 +69,7 @@ has full local access and the input cannot grant GitHub credentials.
 ## Sources of Truth
 
 - `.github/workflows/pr-review.yml`: executable ordering, permissions, credentials and validation.
+- `.github/scripts/pr-review/prepare-review-history.sh`: base-pinned history authentication and range selection.
+- `scripts/test-pr-review-contract.py`: tracked offline truth-table fixtures run by CI.
 - `.github/workflows/ci.yml`: local trigger and secret forwarding.
 - `.claude/skills/pr-review/`: reviewer behavior and comment contract.

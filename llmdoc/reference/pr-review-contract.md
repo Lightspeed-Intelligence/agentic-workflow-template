@@ -58,6 +58,8 @@ Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even w
 ## Sources of Truth
 
 - `.github/workflows/pr-review.yml`
+- `.github/scripts/pr-review/prepare-review-history.sh`
+- `scripts/test-pr-review-contract.py`
 - `.claude/skills/pr-review/SKILL.md`
 - `.claude/skills/pr-review/references/review-sop.md`
 - `.claude/skills/pr-review/references/output-format.md`

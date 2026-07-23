@@ -24,6 +24,7 @@ Baseline:
 git diff --check
 bash -n scripts/init.sh scripts/status.sh scripts/update-all.sh
 actionlint .github/workflows/*.yml
+python3 scripts/test-pr-review-contract.py
 ```
 
 If the repository-wide command exposes a pre-existing baseline warning, prove that the changed
@@ -40,6 +41,10 @@ Also:
 - exercise history-state fixtures for trusted/untrusted author, malformed marker, stale/current/non-ancestor SHA,
   0/1/3/4 suggestions and any critical/important count; all invalid cases must select full review;
 - verify documentation examples satisfy the same executable truth table.
+
+`scripts/test-pr-review-contract.py` is the maintained offline truth table. It exercises the actual
+base-pinned history-preparation script plus the workflow's schemas, publisher gate, fallback/artifact
+conditions and extra-tool allowlist; `.github/workflows/ci.yml` runs it for pull requests.
 
 ## 4. Commit with Temporal Evidence
 

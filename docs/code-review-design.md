@@ -192,6 +192,11 @@ job 的只读 token 读取评论，只接受 `github-actions` App 发布的最�
 不成立时，全部回退到完整 `base...head`。这既避免小修复被反复全量挖问题，也不让评论
 成为未经校验的安全边界。
 
+上述控制流由 `scripts/test-pr-review-contract.py` 的离线真值表覆盖，并由 CI 的
+`pr-review-contract` job 在每个 PR 上运行。测试直接调用 workflow 使用的 base-pinned
+历史准备脚本，同时验证 schema、publisher gate、fallback/artifact 条件和工具 allowlist，
+避免实现与临时 `.code-review/` fixture 漂移。
+
 ```mermaid
 sequenceDiagram
     participant Dev as 开发者
