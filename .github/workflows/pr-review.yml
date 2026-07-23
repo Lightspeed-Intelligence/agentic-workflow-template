@@ -51,6 +51,11 @@ jobs:
           persist-credentials: false
           token: ${{ github.token }}
 
+      - name: Sanitize trusted checkout path
+        run: |
+          rm -rf -- .trusted-base
+          mkdir -p -- .trusted-base
+
       - name: Checkout trusted review skill from base commit
         uses: actions/checkout@v5
         with:
@@ -212,9 +217,10 @@ jobs:
       - name: Upload Codex review result
         uses: actions/upload-artifact@v4
         with:
-          name: review-result-codex-${{ github.run_attempt }}
+          name: review-result-codex
           path: review-output/review.json
           if-no-files-found: error
+          overwrite: true
           retention-days: 1
 
   # 独立 runner 避免失败的 Codex 进程污染 fallback 的工作树、工具或输入。
@@ -236,6 +242,11 @@ jobs:
           submodules: recursive
           persist-credentials: false
           token: ${{ github.token }}
+
+      - name: Sanitize trusted checkout path
+        run: |
+          rm -rf -- .trusted-base
+          mkdir -p -- .trusted-base
 
       - name: Checkout trusted review skill from base commit
         uses: actions/checkout@v5
@@ -364,7 +375,6 @@ jobs:
           cd "$SAFE_ROOT"
           node "$CLAUDE_WRAPPER" -p \
             --bare \
-            --add-dir "$GITHUB_WORKSPACE" \
             --no-session-persistence \
             --model fable-5 \
             --dangerously-skip-permissions \
@@ -398,9 +408,10 @@ jobs:
       - name: Upload Claude review result
         uses: actions/upload-artifact@v4
         with:
-          name: review-result-claude-${{ github.run_attempt }}
+          name: review-result-claude
           path: review-output/review.json
           if-no-files-found: error
+          overwrite: true
           retention-days: 1
 
   # 唯一拥有 PR 写权限的 job。它不运行 Agent，也不接收模型 API key。
@@ -419,14 +430,14 @@ jobs:
         if: needs.codex_review.result == 'success'
         uses: actions/download-artifact@v4
         with:
-          name: review-result-codex-${{ github.run_attempt }}
+          name: review-result-codex
           path: .review-input
 
       - name: Download Claude review result
         if: needs.claude_review.result == 'success'
         uses: actions/download-artifact@v4
         with:
-          name: review-result-claude-${{ github.run_attempt }}
+          name: review-result-claude
           path: .review-input
 
       - name: Validate and publish review comment
