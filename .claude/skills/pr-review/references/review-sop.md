@@ -119,7 +119,7 @@ The reviewer must try to surface all merge-blocking risks in a single pass, so t
 
 - Before finalizing, re-scan the in-scope diff for other instances of any issue class you are already reporting; list them together instead of catching one per round.
 - State explicitly whether the reported findings are, to your knowledge, the complete set of blocking risks for this PR.
-- Do not hold back a known issue to raise it later. A later round should add findings only when new commits actually introduce new risk (see Incremental Review in `SKILL.md`).
+- Do not hold back a known issue to raise it later. A later round should avoid re-mining unchanged code for low-confidence padding, but a genuine, verifiable BLOCKER or MAJOR must always be reported even if a prior round missed it — note that it was not newly introduced (see Incremental Review in `SKILL.md`).
 
 ## Overall Merge Judgment
 
