@@ -340,7 +340,9 @@ jobs:
           CLAUDE_INSTALL_DIR="$RUNNER_TEMP/claude-code-2.1.148"
           npm install --ignore-scripts --no-audit --no-fund \
             --prefix "$CLAUDE_INSTALL_DIR" @anthropic-ai/claude-code@2.1.148
-          "$CLAUDE_INSTALL_DIR/node_modules/.bin/claude" --version
+          CLAUDE_WRAPPER="$CLAUDE_INSTALL_DIR/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs"
+          test -f "$CLAUDE_WRAPPER"
+          node "$CLAUDE_WRAPPER" --version
 
       - name: Review with Claude Code and Fable-5
         env:
@@ -353,14 +355,14 @@ jobs:
           BASE_URL="${ANTHROPIC_BASE_URL:-https://llm.fantacy.live}"
           export ANTHROPIC_BASE_URL="${BASE_URL%/}"
 
-          CLAUDE_PATH="$RUNNER_TEMP/claude-code-2.1.148/node_modules/.bin/claude"
+          CLAUDE_WRAPPER="$RUNNER_TEMP/claude-code-2.1.148/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs"
 
           SCHEMA=$(jq -c . "$RUNNER_TEMP/review-schema.json")
           RAW_RESULT="$RUNNER_TEMP/claude-result.json"
           SAFE_ROOT="$RUNNER_TEMP/claude-review-root"
           mkdir -p "$SAFE_ROOT"
           cd "$SAFE_ROOT"
-          "$CLAUDE_PATH" -p \
+          node "$CLAUDE_WRAPPER" -p \
             --bare \
             --add-dir "$GITHUB_WORKSPACE" \
             --no-session-persistence \
