@@ -1,120 +1,41 @@
 ---
 name: pr-review
-description: 自动审查 PR, 检查代码质量、风格和潜在问题, 支持增量审查。
+description: Review GitHub pull requests with a deep adversarial code-review posture. Use for PR review, code review, pre-merge checks, and incremental review in CI.
 ---
 
-# pr-review
+# PR Review
 
-审查 PR 的代码质量、风格、安全性和性能。
+You are performing a deep, adversarial PR review. Be adversarial, not agreeable: your job is to falsify risky claims and identify concrete merge risks, not to praise the change.
 
-> 遵循 `github-comment` 规范。
+Before reviewing, read `references/review-sop.md` and `references/output-format.md`. They are part of this skill and define the detailed review method and required PR comment structure.
 
-## 前置检查
+## Execution Rules
 
-以下情况**跳过审查**：
+- You are the reviewer. Do not invoke `codex`, do not delegate to another agent, and do not start a nested review workflow.
+- Do not modify source code, documentation, config, or generated files.
+- Read `llmdoc/index.md` first if `llmdoc/` exists, then read all files in `llmdoc/overview/`, then read relevant architecture, guide, or reference docs for the changed area.
+- Use the current repository checkout and actual files on disk as the source of truth. Do not trust commit messages, comments, PR descriptions, or stale file:line references.
+- Keep findings focused on the PR diff. Do not report pre-existing issues unless the PR makes them worse or relies on the broken behavior.
+- If you are not sure a finding is real, do not report it as a finding. Put it under open questions only if it blocks merge confidence.
 
-- PR 已关闭或是 draft
-- 明显不需要审查（自动化 PR、trivial 改动）
+## Incremental Review
 
-## 增量审查机制
+PRs may be reviewed multiple times.
 
-PR 可能有多次提交，需要支持增量审查：
+1. Use `gh pr view --comments` when available to inspect prior review comments.
+2. Look for the marker `审查截止: {sha}` in a previous Codex PR review comment.
+3. If found, review only `git diff {last_sha}..HEAD`.
+4. If not found, review the PR diff against the merge base of the PR base and head.
+5. Always include the current full commit SHA in the final comment using exactly this format:
 
-1. **检查历史评论**: `gh pr view --comments` 查找自己之前的评论
-2. **提取上次审查的 commit SHA**: 从评论中的 `审查截止: {sha}` 获取
-3. **计算增量 diff**: `git diff {last_sha}..HEAD`
-4. **只审查增量**: 新增的改动，不重复审查已审查过的代码
-
-**评论中必须记录审查截止点**，格式：
-
-```
+```text
 审查截止: abc1234def5678
 ```
 
-## 高信号问题 (只标记这些)
+## Review Method
 
-- **编译/解析错误**: 语法错误、类型错误、缺少 import、未定义引用
-- **明确逻辑错误**: 无论输入如何都会产生错误结果
-- **明确规范违反**: 能引用被违反的具体规则
-- 代码风格或质量问题
+Follow the detailed SOP in `references/review-sop.md`.
 
-## 不标记清单 (误报来源)
+## Output Format
 
-- 预存问题（改动前就存在的）
-- 依赖特定输入/状态的潜在问题
-- 主观建议或改进
-- Linter 能捕获的问题
-
-**不确定就不标记。误报会消耗信任。**
-
-## 特殊规则
-
-- **Submodule**: 注意 submodule 变更，结合上下文审查
-- **验证机制**: 标记问题前先验证其确实存在于代码中
-
-## 模板
-
-```markdown
-## 🔍 PR 审查
-
-| 项目 | 结果 |
-|------|------|
-| **结论** | ✅ APPROVE / ⚠️ REQUEST_CHANGES / 💬 COMMENT |
-| **审查截止** | `{commit_sha}` |
-
-{一句话总结}
-
-<details>
-<summary><h3>🔴 阻塞问题 (N)</h3></summary>
-
-- **文件**: `{path}` [代码链接]({github_link})
-- **问题**: {描述}
-- **建议**: {修复方式}
-
-</details>
-
-<details>
-<summary><h3>🟠 重要建议 (N)</h3></summary>
-
-- **文件**: `{path}`
-- **问题**: {描述}
-- **建议**: {改进方式}
-
-</details>
-
-<details>
-<summary><h3>🟢 小问题 (N)</h3></summary>
-
-- **文件**: `{path}`
-- **问题**: {风格或小建议}
-
-</details>
-```
-
-无问题时输出：
-
-```markdown
-## 🔍 PR 审查
-
-| 项目 | 结果 |
-|------|------|
-| **结论** | ✅ APPROVE |
-| **审查截止** | `{commit_sha}` |
-
-代码良好，无问题。已检查 bug 和代码规范。
-```
-
-增量审查时输出：
-
-```markdown
-## 🔍 PR 增量审查
-
-| 项目 | 结果 |
-|------|------|
-| **结论** | ✅ APPROVE / ⚠️ REQUEST_CHANGES / 💬 COMMENT |
-| **审查范围** | `{last_sha}..{current_sha}` |
-
-{针对增量改动的总结}
-
-{如有问题，使用上述折叠格式}
-```
+Write the final answer as the PR comment body in Simplified Chinese. Follow `references/output-format.md` exactly.
