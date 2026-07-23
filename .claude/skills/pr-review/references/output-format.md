@@ -4,11 +4,11 @@ The final answer must be the GitHub PR comment body in Simplified Chinese.
 
 ## Conclusion Values
 
-Use exactly one:
+Choose by the overall merge judgment (see `references/review-sop.md`), not by a raw count of findings. Use exactly one:
 
-- `APPROVE`: no merge-blocking or important issues found.
-- `REQUEST_CHANGES`: at least one blocker exists, or the PR is unsafe to merge as-is.
-- `COMMENT`: no blocker, but there are important suggestions or unresolved questions.
+- `APPROVE`: no genuine blocker. Non-blocking MINOR/NIT items, or MAJOR items that are recommendations rather than correctness/safety failures, do not by themselves prevent APPROVE. Finding nothing on a low-risk PR is a normal APPROVE.
+- `REQUEST_CHANGES`: at least one genuine BLOCKER exists — code that can break correctness, safety, data integrity, security, or deployment as written. A pile of low-severity or gate-driven items does not add up to REQUEST_CHANGES when no single item is merge-blocking.
+- `COMMENT`: no blocker, but there are worthwhile suggestions or unresolved questions the author should weigh.
 
 ## Severity
 
@@ -31,6 +31,18 @@ Use exactly one:
 审查截止: {current_full_sha}
 
 {一句话总结}
+
+{风险分级: 低 / 中 / 高 —— 一句话说明依据}
+
+{完整性声明: 据本轮审查，以上为本 PR 已知的全部阻塞级风险 / 仍有需作者确认的开放问题见下}
+
+<details>
+<summary><h3>历史问题复核 (仅增量审查时)</h3></summary>
+
+- {对上一轮每个 BLOCKER/MAJOR 逐条给出: 已解决 / 仍存在 / 部分解决}
+- 首次审查填「无」
+
+</details>
 
 <details>
 <summary><h3>阻塞问题 (N)</h3></summary>
