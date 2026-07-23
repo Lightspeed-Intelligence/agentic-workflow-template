@@ -85,7 +85,13 @@ jobs:
           {
             "type": "object",
             "properties": {
-              "description": { "type": "string", "minLength": 1, "maxLength": 500 },
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "^[^\\r\\n]*$",
+                "description": "不含 CR/LF 的单行审查结论摘要"
+              },
               "conclusion": {
                 "type": "string",
                 "enum": ["APPROVE", "REQUEST_CHANGES", "COMMENT"],
@@ -137,6 +143,7 @@ jobs:
 
           输出要求:
           - 最终回复只输出符合给定 JSON Schema 的对象
+          - description 是不含换行的单行摘要，长度不超过 500 字符
           - comment_body 是待后续发布 job 代发的完整审查评论，使用简体中文
           - APPROVE 仅当三个问题计数均为 0；critical_count 或 important_count 非 0 时必须 REQUEST_CHANGES
           - 代码链接必须使用完整 head commit SHA，不得使用分支名
@@ -189,6 +196,7 @@ jobs:
           jq -c '. + {reviewer: "codex", model: "gpt-5.6-sol"}' \
             "$LAST_MSG" > .review-output/review.json
           jq -e '
+            (.description | type == "string" and length > 0 and length <= 500 and (test("[\\r\\n]") | not)) and
             (.conclusion | IN("APPROVE", "REQUEST_CHANGES", "COMMENT")) and
             (.comment_body | type == "string" and length > 0 and length <= 60000) and
             (.critical_count | type == "number" and . >= 0 and floor == .) and
@@ -263,7 +271,13 @@ jobs:
           {
             "type": "object",
             "properties": {
-              "description": { "type": "string", "minLength": 1, "maxLength": 500 },
+              "description": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500,
+                "pattern": "^[^\\r\\n]*$",
+                "description": "不含 CR/LF 的单行审查结论摘要"
+              },
               "conclusion": {
                 "type": "string",
                 "enum": ["APPROVE", "REQUEST_CHANGES", "COMMENT"],
@@ -315,6 +329,7 @@ jobs:
 
           输出要求:
           - 最终回复只输出符合给定 JSON Schema 的对象
+          - description 是不含换行的单行摘要，长度不超过 500 字符
           - comment_body 是待后续发布 job 代发的完整审查评论，使用简体中文
           - APPROVE 仅当三个问题计数均为 0；critical_count 或 important_count 非 0 时必须 REQUEST_CHANGES
           - 代码链接必须使用完整 head commit SHA，不得使用分支名
@@ -365,6 +380,7 @@ jobs:
             | . + {reviewer: "claude", model: "fable-5"}
           ' "$RAW_RESULT" > "$GITHUB_WORKSPACE/.review-output/review.json"
           jq -e '
+            (.description | type == "string" and length > 0 and length <= 500 and (test("[\\r\\n]") | not)) and
             (.conclusion | IN("APPROVE", "REQUEST_CHANGES", "COMMENT")) and
             (.comment_body | type == "string" and length > 0 and length <= 60000) and
             (.critical_count | type == "number" and . >= 0 and floor == .) and
