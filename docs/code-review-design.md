@@ -147,22 +147,14 @@ flowchart TD
 flowchart TD
     start["从安全临时目录启动<br/>不自动加载 PR 中的配置/Hook"]
     load["加载 base commit 的 pr-review Skill<br/>PR head 中的指令只当数据"]
-    check["确定性步骤验证 bot 评论尾部机器标记<br/>Agent 只读取已验证的截止 SHA"]
-    found{"找到<br/>审查截止: sha ?"}
-    full["首次审查<br/>读取预生成的全量 diff"]
-    incr["增量审查<br/>git diff {sha}..HEAD"]
+    full["读取预生成的完整 base...head diff<br/>不查询历史评论状态"]
     review["逐文件审查代码<br/>标记高信号问题"]
     json["返回结构化 JSON<br/>包含待发布 comment_body"]
     publish["发布 Job 校验结果<br/>gh pr comment 代发"]
 
-    start --> load --> check --> found
-    found -->|"没找到"| full
-    found -->|"找到了"| incr
-    full --> review
-    incr --> review
+    start --> load --> full --> review
     review --> json --> publish
 
-    style found fill:#fff9c4,stroke:#FFC107
     style review fill:#c8e6c9,stroke:#4CAF50
 ```
 
@@ -180,13 +172,11 @@ Agent 可以修改临时工作区，但既没有可持久化的 Git 凭据，也
 
 ---
 
-## 增量审查是怎么实现的
+## 为什么每次审完整 diff
 
-这个设计比较巧妙，值得单独讲。
+一个 PR 可能连续 push 多次，增量审查虽然更省模型用量，但需要跨 workflow run 保存“已经审到哪个 SHA”的可信状态。普通 `GITHUB_TOKEN` 发布的评论都显示为共享的 `github-actions` bot，仓库内其它 workflow 也能使用同一身份，无法仅凭评论作者证明状态来自本审查流程。
 
-**问题**：一个 PR 可能连续 push 好几次，你不希望每次都从头审一遍。
-
-**方案**：用 PR 评论当"状态存储"——每次审查完在评论里记录一个 commit SHA，下次只 diff 这个 SHA 之后的新改动。
+因此默认设计选择每次都审查完整 `base...head` diff，不读取历史评论，也不把评论当状态存储。这样会增加一些重复审查成本，但不会因为伪造截止 SHA 而漏掉未审改动。
 
 ```mermaid
 sequenceDiagram
@@ -194,28 +184,14 @@ sequenceDiagram
     participant AI as Codex / Claude Code
     participant Pub as 发布 Job
 
-    Note over Dev,AI: 第一次 push
-    Dev->>AI: PR opened / synchronize
-    AI->>AI: 没找到历史审查记录 → 全量审查
-    AI-->>Pub: 输出包含 "审查截止: aaa111"
+    Dev->>AI: PR opened → 完整 base...head diff
+    AI-->>Pub: 结构化审查结果
     Pub-->>Dev: 代发审查评论
 
-    Note over Dev,AI: 第二次 push
-    Dev->>AI: PR synchronize
-    AI->>AI: 找到 "审查截止: aaa111"
-    AI->>AI: git diff aaa111..HEAD (只看新改动)
-    AI-->>Pub: 输出包含 "审查截止: bbb222"
-    Pub-->>Dev: 代发审查评论
-
-    Note over Dev,AI: 第三次 push
-    Dev->>AI: PR synchronize
-    AI->>AI: 找到 "审查截止: bbb222"
-    AI->>AI: git diff bbb222..HEAD
-    AI-->>Pub: 输出包含 "审查截止: ccc333"
+    Dev->>AI: PR synchronize → 新 head 的完整 base...head diff
+    AI-->>Pub: 结构化审查结果
     Pub-->>Dev: 代发审查评论
 ```
-
-没有额外的数据库、没有外部存储，就靠 PR 评论尾部的隐藏机器标记实现状态跟踪。确定性步骤只接受 GitHub Actions bot 发布且绑定完整 head SHA 的标记，完成 base/head 祖先校验后才把 SHA 交给 Agent；原始评论不会交给 Agent 做信任判断。
 
 ---
 
@@ -433,7 +409,7 @@ flowchart TD
 
 - **模板仓库 + Reusable Workflow** — 改一处，全局生效，多仓库接入成本极低
 - **Skill = Markdown SOP** — AI 的行为规则以 Markdown 定义，任何人都能读懂和修改
-- **评论里存状态** — 增量审查不需要外部存储，历史评论由只读步骤预取
+- **完整范围优先** — 不信任共享 bot 评论状态，每次覆盖完整 PR diff
 - **结构化输出** — JSON Schema 让 AI 的结果可编程，驱动通知和统计
 - **权限分层** — Agent 对临时 runner 高权限、对 GitHub 只读；副作用集中到确定性发布 Job
 - **主备隔离** — Codex 优先，失败时 Claude Code 在新 runner 上接手，避免环境污染

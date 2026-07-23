@@ -64,9 +64,6 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           jq '{
             number: .pull_request.number,
@@ -80,41 +77,6 @@ jobs:
           }' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr.json"
           git diff --find-renames "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/pr.diff"
           git log --format='%H %s' "$BASE_SHA..$HEAD_SHA" > "$RUNNER_TEMP/pr-commits.txt"
-          gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json comments \
-            > "$RUNNER_TEMP/pr-comments.json"
-
-          # 只有确定性发布步骤追加、且由 GitHub Actions bot 发布的尾部机器标记
-          # 才能建立增量审查状态。Agent 永远看不到原始评论，也不参与信任判断。
-          CANDIDATE=$(jq -r '
-            [
-              .comments[]
-              | select(
-                  .author.login == "github-actions" or
-                  .author.login == "github-actions[bot]"
-                )
-              | select(
-                  .body
-                  | test("<!-- agentic-pr-review:head=[0-9a-f]{40} -->[[:space:]]*$")
-                )
-              | {
-                  createdAt,
-                  head: (
-                    .body
-                    | capture("<!-- agentic-pr-review:head=(?<head>[0-9a-f]{40}) -->[[:space:]]*$")
-                    | .head
-                  )
-                }
-            ]
-            | sort_by(.createdAt)
-            | (.[-1].head // empty)
-          ' "$RUNNER_TEMP/pr-comments.json")
-          : > "$RUNNER_TEMP/verified-cutoff.txt"
-          if [ -n "$CANDIDATE" ] &&
-             git merge-base --is-ancestor "$BASE_SHA" "$CANDIDATE" &&
-             git merge-base --is-ancestor "$CANDIDATE" "$HEAD_SHA"; then
-            printf '%s\n' "$CANDIDATE" > "$RUNNER_TEMP/verified-cutoff.txt"
-          fi
-          rm "$RUNNER_TEMP/pr-comments.json"
 
           cat > "$RUNNER_TEMP/review-schema.json" <<'SCHEMA_EOF'
           {
@@ -159,11 +121,10 @@ jobs:
           - PR 元数据: $RUNNER_TEMP/pr.json
           - PR 完整 diff: $RUNNER_TEMP/pr.diff
           - PR commit 列表: $RUNNER_TEMP/pr-commits.txt
-          - 已确定性验证的上次审查截止 SHA: $RUNNER_TEMP/verified-cutoff.txt（空文件表示首次/全量审查）
           - PR head 的完整 checkout: $GITHUB_WORKSPACE
 
-          如审查规范要求通过 gh 查询历史评论，请改读上述 verified-cutoff 文件；信任判断
-          已由非 Agent 步骤完成，不要自行读取或推断评论。文件为空时审查完整 diff。
+          每次都审查上述完整 base...head diff。不要查询或使用历史 PR 评论来缩小范围；
+          评论身份在不同 workflow 间共享，不能作为可信的增量状态来源。
 
           安全边界:
           - 你拥有完整的本地执行权限，可以运行测试、构建和分析工具
@@ -270,9 +231,6 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           jq '{
             number: .pull_request.number,
@@ -286,40 +244,6 @@ jobs:
           }' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr.json"
           git diff --find-renames "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/pr.diff"
           git log --format='%H %s' "$BASE_SHA..$HEAD_SHA" > "$RUNNER_TEMP/pr-commits.txt"
-          gh pr view "$PR_NUMBER" --repo "$GH_REPO" --json comments \
-            > "$RUNNER_TEMP/pr-comments.json"
-
-          # 逻辑与 Codex 主链路相同；fallback 的独立 runner 重新验证状态。
-          CANDIDATE=$(jq -r '
-            [
-              .comments[]
-              | select(
-                  .author.login == "github-actions" or
-                  .author.login == "github-actions[bot]"
-                )
-              | select(
-                  .body
-                  | test("<!-- agentic-pr-review:head=[0-9a-f]{40} -->[[:space:]]*$")
-                )
-              | {
-                  createdAt,
-                  head: (
-                    .body
-                    | capture("<!-- agentic-pr-review:head=(?<head>[0-9a-f]{40}) -->[[:space:]]*$")
-                    | .head
-                  )
-                }
-            ]
-            | sort_by(.createdAt)
-            | (.[-1].head // empty)
-          ' "$RUNNER_TEMP/pr-comments.json")
-          : > "$RUNNER_TEMP/verified-cutoff.txt"
-          if [ -n "$CANDIDATE" ] &&
-             git merge-base --is-ancestor "$BASE_SHA" "$CANDIDATE" &&
-             git merge-base --is-ancestor "$CANDIDATE" "$HEAD_SHA"; then
-            printf '%s\n' "$CANDIDATE" > "$RUNNER_TEMP/verified-cutoff.txt"
-          fi
-          rm "$RUNNER_TEMP/pr-comments.json"
 
           cat > "$RUNNER_TEMP/review-schema.json" <<'SCHEMA_EOF'
           {
@@ -364,11 +288,10 @@ jobs:
           - PR 元数据: $RUNNER_TEMP/pr.json
           - PR 完整 diff: $RUNNER_TEMP/pr.diff
           - PR commit 列表: $RUNNER_TEMP/pr-commits.txt
-          - 已确定性验证的上次审查截止 SHA: $RUNNER_TEMP/verified-cutoff.txt（空文件表示首次/全量审查）
           - PR head 的完整 checkout: $GITHUB_WORKSPACE
 
-          如审查规范要求通过 gh 查询历史评论，请改读上述 verified-cutoff 文件；信任判断
-          已由非 Agent 步骤完成，不要自行读取或推断评论。文件为空时审查完整 diff。
+          每次都审查上述完整 base...head diff。不要查询或使用历史 PR 评论来缩小范围；
+          评论身份在不同 workflow 间共享，不能作为可信的增量状态来源。
 
           安全边界:
           - 你拥有完整的本地执行权限，可以运行测试、构建和分析工具
@@ -485,10 +408,6 @@ jobs:
           ' "$REVIEW_FILE" > /dev/null
 
           jq -r '.comment_body' "$REVIEW_FILE" > "$RUNNER_TEMP/review-comment.md"
-          if grep -Fq '<!-- agentic-pr-review:' "$RUNNER_TEMP/review-comment.md"; then
-            echo "::error::Agent 评论正文不得包含内部审查状态标记"
-            exit 1
-          fi
           REVIEWER=$(jq -r '.reviewer' "$REVIEW_FILE")
           if [ "$REVIEWER" = "codex" ]; then
             FOOTER="本次审查由 Codex 主链路 (gpt-5.6-sol) 完成。"
@@ -499,7 +418,6 @@ jobs:
             echo
             echo "---"
             echo "_${FOOTER}_"
-            echo "<!-- agentic-pr-review:head=${{ github.event.pull_request.head.sha }} -->"
           } >> "$RUNNER_TEMP/review-comment.md"
 
           gh pr comment "${{ github.event.pull_request.number }}" \

@@ -101,7 +101,7 @@ jobs:
 | `issue-dispatch` | Issue 创建/打标签     | 根据标签分发到 bug-analyze / feature-review / answer-question |
 | `implement`      | 评论 `/impl` 或 `ok`  | 实现代码并创建 PR                                             |
 | `question`       | 评论 `/ask` `/q` `/?` | 回答技术问题                                                  |
-| `pr-review`      | PR 创建/更新          | 代码审查，支持增量审查                                        |
+| `pr-review`      | PR 创建/更新          | 代码审查，每次覆盖完整 PR diff                                 |
 
 ## Skills
 
@@ -111,7 +111,7 @@ jobs:
 | `bug-analyze`     | Bug 分析 | 根因定位 + 自动修复 (简单 bug) |
 | `feature-review`  | 需求评审 | 成本估算 + 影响分析 (面向产品) |
 | `implement`       | 代码实现 | 创建分支 + PR                  |
-| `pr-review`       | PR 审查  | 高信号问题 + 增量审查          |
+| `pr-review`       | PR 审查  | 高信号问题 + 完整 diff 审查     |
 | `answer-question` | 问题回答 | 技术咨询                       |
 
 ## 配置项
@@ -246,5 +246,5 @@ GitHub token；审查评论由单独的发布 job 校验结构化结果后代发
 
 1. **llmdoc 优先** - Agent 会先读取 `llmdoc/` 理解项目
 2. **评论折叠** - 长内容使用 `<details>` 折叠
-3. **增量审查** - PR 审查会记录 commit SHA，支持增量
+3. **完整审查** - PR 每次更新都重新覆盖完整 diff，避免依赖不可认证的评论状态
 4. **高信号** - 只标记确定的问题，避免误报
