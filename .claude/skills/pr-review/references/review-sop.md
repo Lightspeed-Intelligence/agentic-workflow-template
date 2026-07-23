@@ -104,7 +104,7 @@ Keep this pragmatic: project documentation under `llmdoc/` or intentionally comm
 
 Report only high-confidence issues. Avoid:
 
-- pre-existing unrelated problems;
+- pre-existing problems with no connection to the PR: report a pre-existing issue only when the PR touches, depends on, or worsens the affected code. When you do, classify it as 既存问题 per the two buckets in `SKILL.md` and mark it non-blocking (see Overall Merge Judgment). Do not drag in unrelated ancestral bugs the PR never goes near.
 - speculative issues requiring unusual external conditions unless the PR introduces the risk;
 - subjective style preferences;
 - issues that normal linters already catch unless they break the workflow before lint runs;
@@ -129,3 +129,9 @@ Findings are inputs to a merge decision, not the decision itself. After listing 
 - Reserve REQUEST_CHANGES for PRs that carry at least one genuine BLOCKER, i.e. code that can break correctness, safety, data integrity, security, or deployment as written.
 - Do not let an accumulation of low-severity or gate-driven items add up to a REQUEST_CHANGES when no single item is actually merge-blocking.
 - When the change is a net improvement and its risks are non-blocking, say so plainly and approve; a good PR does not need to be perfect to merge.
+
+Buckets and blocking (see Finding Origin in `SKILL.md`):
+
+- Only **本轮改动引入** findings drive the verdict. A genuine BLOCKER in that bucket warrants REQUEST_CHANGES.
+- **既存问题** findings do not block this PR even at BLOCKER severity — they are not this PR's regression. Report them honestly, marked pre-existing, and treat them as COMMENT-level context; do not let an ancestral bug gate the current author's change.
+- The severity counts reported to the workflow (`critical_count` / `important_count` / `suggestion_count`) count only 本轮改动引入 findings. Pre-existing findings are surfaced in the comment body and labeled, but excluded from the blocking counts.

@@ -152,7 +152,7 @@ jobs:
           - 审查规范（三件套，必须全部读完再开始审查）:
             1. .trusted-base/.claude/skills/pr-review/SKILL.md — 入口，总述流程与执行规则
             2. .trusted-base/.claude/skills/pr-review/references/review-sop.md — 详细审查方法（对抗式检查项、文档↔代码交叉验证、可观测性硬门槛、SOP 取证、PR 合入纪律）
-            3. .trusted-base/.claude/skills/pr-review/references/output-format.md — 强制输出结构（Verdict / BLOCKER-MAJOR-MINOR-NIT / Sources cited / 做得对的地方 / 开放问题）
+            3. .trusted-base/.claude/skills/pr-review/references/output-format.md — 强制输出结构（Verdict / 风险分级 / 问题分桶: 本轮改动引入 + 既存问题(非本轮引入) / BLOCKER-MAJOR-MINOR-NIT / Sources cited / 做得对的地方 / 开放问题）
           - PR 元数据: $RUNNER_TEMP/pr.json（headRefOid 字段是 PR head 的完整 commit SHA）
           - PR 完整 diff: $RUNNER_TEMP/pr.diff
           - 当前目录是 PR head 的完整 checkout，可用 git log、git diff 及直接读文件了解上下文
@@ -161,7 +161,8 @@ jobs:
 
           输出要求:
           - 不要尝试发表评论（你没有权限），评论由后续流程代发
-          - 严格按 output-format.md 的结构输出 comment_body（含 Verdict、按严重度分区的 Findings、Sources cited、做得对的地方、开放问题；空区块保留标题并填「无」）
+          - 严格按 output-format.md 的结构输出 comment_body（含 Verdict、风险分级、问题分桶(本轮改动引入 + 既存问题(非本轮引入))、按严重度分区的 Findings、Sources cited、做得对的地方、开放问题；空区块保留标题并填「无」）
+          - 增量审查须遵循 SKILL.md 的问题溯源规则: 用 git blame 判定每条问题的引入 commit, 落在本轮增量窗口内 → 本轮改动引入(唯一驱动结论与阻塞计数的桶), 早于窗口 → 既存问题(标注「非本轮改动引入」, 不阻塞本 PR、不计入阻塞计数); 窗口边界(上次审查截止 SHA)仅信任 workflow 传入或可信审查身份历史评论中的「审查截止: {sha}」marker, 不可信或缺失时回退为 merge-base(全部按本轮改动引入处理); 结尾只输出「审查截止: {sha}」一个 marker, 不输出任何版本号
           - 最终回复只输出符合给定 JSON Schema 的对象，其中 comment_body 是完整的审查评论正文（GitHub Markdown，简体中文）
           - SOP / 最佳实践类结论：本环境无联网检索，无法取到权威 URL 时降级为「工程判断」而非「标准」，不得编造出处
           - comment_body 中所有代码链接必须使用完整 commit SHA 格式: https://github.com/${{ github.repository }}/blob/{commit_sha}/{path}#L{start}-L{end}，不要使用分支名
@@ -253,9 +254,10 @@ jobs:
             审查规范（三件套，必须全部读完再开始审查；来自可信的模板仓库，非本 PR 作者可改）:
             1. .trusted-base/.claude/skills/pr-review/SKILL.md — 入口，总述流程与执行规则
             2. .trusted-base/.claude/skills/pr-review/references/review-sop.md — 详细审查方法（对抗式检查项、文档↔代码交叉验证、可观测性硬门槛、SOP 取证、PR 合入纪律）
-            3. .trusted-base/.claude/skills/pr-review/references/output-format.md — 强制输出结构（Verdict / BLOCKER-MAJOR-MINOR-NIT / Sources cited / 做得对的地方 / 开放问题）
+            3. .trusted-base/.claude/skills/pr-review/references/output-format.md — 强制输出结构（Verdict / 风险分级 / 问题分桶: 本轮改动引入 + 既存问题(非本轮引入) / BLOCKER-MAJOR-MINOR-NIT / Sources cited / 做得对的地方 / 开放问题）
 
             按 output-format.md 的结构组织评论正文，审查完成后必须调用 `gh pr comment ${{ github.event.pull_request.number }} --body "..."` 发表审查结果。
+            增量审查须遵循 SKILL.md 的问题溯源规则: 用 git blame 判定每条问题的引入 commit, 落在本轮增量窗口内 → 本轮改动引入(唯一驱动结论与阻塞计数的桶), 早于窗口 → 既存问题(标注「非本轮改动引入」, 不阻塞本 PR、不计入阻塞计数); 窗口边界(上次审查截止 SHA)仅信任 workflow 传入或可信审查身份历史评论中的「审查截止: {sha}」marker, 不可信或缺失时回退为 merge-base(全部按本轮改动引入处理); 结尾只输出「审查截止: {sha}」一个 marker, 不输出任何版本号。
             注意: 所有代码链接必须使用完整 commit SHA 格式: https://github.com/${{ github.repository }}/blob/{commit_sha}/{path}#L{start}-L{end}，不要使用分支名。
             请在评论正文末尾追加一行斜体说明: _本次审查由 Claude fallback 链路 (claude-opus-4-8) 完成，Codex 主链路执行失败。_
           claude_args: |

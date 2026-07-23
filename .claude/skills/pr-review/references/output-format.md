@@ -37,45 +37,36 @@ Choose by the overall merge judgment (see `references/review-sop.md`), not by a 
 {完整性声明: 据本轮审查，以上为本 PR 已知的全部阻塞级风险 / 仍有需作者确认的开放问题见下}
 
 <details>
-<summary><h3>历史问题复核 (仅增量审查时)</h3></summary>
+<summary><h3>本轮改动引入的问题 (N)</h3></summary>
 
-- {对上一轮每个 BLOCKER/MAJOR 逐条给出: 已解决 / 仍存在 / 部分解决}
-- 首次审查填「无」
-
-</details>
-
-<details>
-<summary><h3>阻塞问题 (N)</h3></summary>
+本区块放**由本轮改动引入**的问题（首次审查即整个 PR 引入的问题），按严重度降序排列。只有本区块的 BLOCKER 触发 REQUEST_CHANGES。
 
 - **严重度**: BLOCKER
 - **文件**: `{path}` [代码链接](https://github.com/{owner}/{repo}/blob/{current_full_sha}/{path}#L{start}-L{end})
 - **问题**: {what is wrong}
-- **验证**: {what was verified in code}
+- **验证**: {what was verified in code, 含 git blame 溯源结论}
 - **影响**: {why it matters}
 - **建议**: {specific fix}
 - **出处**: {source name + URL, only when invoking SOP/best practice}
 
-</details>
-
-<details>
-<summary><h3>重要建议 (N)</h3></summary>
-
-- **严重度**: MAJOR
+- **严重度**: MAJOR / MINOR / NIT
 - **文件**: ...
 - **问题**: ...
-- **验证**: ...
-- **影响**: ...
 - **建议**: ...
 
 </details>
 
 <details>
-<summary><h3>小问题 (N)</h3></summary>
+<summary><h3>既存问题（非本轮引入） (N)</h3></summary>
 
-- **严重度**: MINOR / NIT
-- **文件**: ...
-- **问题**: ...
-- **建议**: ...
+本区块放**并非本轮改动引入、但仍然存在**的问题——经 git blame 确认其代码早于本轮增量窗口。**不阻塞本 PR 合入**，也不计入阻塞计数，但如实报告，供作者知情。每条必须带既存标识。首次审查若无此类问题填「无」。
+
+- **严重度**: BLOCKER / MAJOR / MINOR / NIT（如实标注，但不阻塞本 PR）
+- **来源**: 此问题在之前的代码中已存在，非本轮改动引入（git blame: 引入于 `{commit}`，早于审查窗口）
+- **文件**: `{path}` [代码链接](https://github.com/{owner}/{repo}/blob/{current_full_sha}/{path}#L{start}-L{end})
+- **问题**: {what is wrong}
+- **影响**: {why it matters}
+- **建议**: {specific fix}
 
 </details>
 
@@ -101,9 +92,17 @@ Choose by the overall merge judgment (see `references/review-sop.md`), not by a 
 </details>
 ```
 
+## Finding Classification Rules
+
+- Every finding goes in exactly one bucket, decided by `git blame` on the offending lines against repo history — not by which review round caught it. See the Finding Origin section in `SKILL.md`.
+- **本轮改动引入**: the offending code was introduced within this round's incremental window, or older code that this round's change turns defective (interaction bug). This is the only bucket that drives the verdict and the blocking counts.
+- **既存问题（非本轮引入）**: the offending code predates the window and this round did not create the defect. Report it with an explicit pre-existing note, but it never blocks this PR and is excluded from the blocking counts, regardless of severity.
+- The severity counts reported to the workflow (`critical_count` / `important_count` / `suggestion_count`) count **only 本轮改动引入 findings**. Pre-existing findings are labeled in the body but not counted.
+- End the comment with the single cutoff marker `审查截止: {sha}` so the next trusted round can compute its incremental window. Do not emit any version/round number.
+
 ## Empty Sections
 
-Keep the section headers even when empty. Use `无` inside empty details blocks so downstream parsing remains stable.
+Keep the section headers even when empty. Use `无` inside empty details blocks so downstream parsing remains stable. On a first review there is no incremental window, so the whole PR counts as 本轮改动引入 and 既存问题 is typically `无`.
 
 ## Links
 
