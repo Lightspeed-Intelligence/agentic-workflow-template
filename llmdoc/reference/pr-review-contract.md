@@ -33,9 +33,9 @@ Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even w
 
 ## Review Range and History
 
-- History preparation uses the base-SHA script when present. Its first-introduction bootstrap may
-  use the event-pinned PR-head copy only when base has no copy; both paths run before the Agent and
-  receive only the reviewer's read-only job token.
+- History preparation uses only the base-SHA script. When base has no copy, deterministic workflow
+  commands generate full `base...head` inputs with reason `trusted_preparation_unavailable`; PR-head
+  preparation code is never executed.
 - Publisher appends `<!-- pr-review-state:v1:<base64-json> -->` after the model comment, containing
   head SHA, conclusion, counts, reviewer and model.
 - Preparation accepts only the latest marker from a `github-actions[bot]` comment whose GitHub App

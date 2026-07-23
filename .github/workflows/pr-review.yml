@@ -87,13 +87,21 @@ jobs:
             headRefOid: .pull_request.head.sha,
             changedFiles: .pull_request.changed_files
           }' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr.json"
-          # 通常执行 base SHA 的可信脚本；仅在脚本首次随本 PR 引入、base 尚不存在时，
-          # 回退到 event-pinned PR head 中的同名脚本。两者都只接触当前 job 的只读 GitHub token。
+          # 仅执行 base SHA 的可信脚本。若 base 尚无该脚本，不执行 PR head 代码，
+          # 而是 fail closed 到完整 base...head 审查。
           prepare_script="$GITHUB_WORKSPACE/.trusted-base/.github/scripts/pr-review/prepare-review-history.sh"
-          if [[ ! -f "$prepare_script" ]]; then
-            prepare_script="$GITHUB_WORKSPACE/.github/scripts/pr-review/prepare-review-history.sh"
+          if [[ -f "$prepare_script" ]]; then
+            bash "$prepare_script"
+          else
+            jq -n '{
+              mode: "full",
+              reason: "trusted_preparation_unavailable",
+              available: false,
+              previous: null
+            }' > "$RUNNER_TEMP/review-history.json"
+            git diff --find-renames "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/pr.diff"
+            git log --format='%H %s' "$BASE_SHA..$HEAD_SHA" > "$RUNNER_TEMP/pr-commits.txt"
           fi
-          bash "$prepare_script"
 
           cat > "$RUNNER_TEMP/review-schema.json" <<'SCHEMA_EOF'
           {
@@ -308,13 +316,21 @@ jobs:
             headRefOid: .pull_request.head.sha,
             changedFiles: .pull_request.changed_files
           }' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr.json"
-          # fallback runner 独立重建同一份输入；优先执行 base SHA 的可信脚本。
-          # 若 base 尚无该脚本，则仅用 event-pinned PR head 版本完成首次引入。
+          # fallback runner 独立重建同一份输入；仅执行 base SHA 的可信脚本。
+          # 若 base 尚无该脚本，不执行 PR head 代码，直接选择完整审查。
           prepare_script="$GITHUB_WORKSPACE/.trusted-base/.github/scripts/pr-review/prepare-review-history.sh"
-          if [[ ! -f "$prepare_script" ]]; then
-            prepare_script="$GITHUB_WORKSPACE/.github/scripts/pr-review/prepare-review-history.sh"
+          if [[ -f "$prepare_script" ]]; then
+            bash "$prepare_script"
+          else
+            jq -n '{
+              mode: "full",
+              reason: "trusted_preparation_unavailable",
+              available: false,
+              previous: null
+            }' > "$RUNNER_TEMP/review-history.json"
+            git diff --find-renames "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/pr.diff"
+            git log --format='%H %s' "$BASE_SHA..$HEAD_SHA" > "$RUNNER_TEMP/pr-commits.txt"
           fi
-          bash "$prepare_script"
 
           cat > "$RUNNER_TEMP/review-schema.json" <<'SCHEMA_EOF'
           {

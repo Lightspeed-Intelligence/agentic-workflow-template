@@ -281,49 +281,63 @@ def test_extra_allowed_tools(workflow: str) -> None:
     assert not any(accepts(value) for value in invalid)
 
 
-def test_prepare_script_bootstrap(workflow: str) -> None:
+def test_prepare_script_selection(workflow: str, repo_info: dict[str, str]) -> None:
     pattern = re.compile(
         r'^          prepare_script="\$GITHUB_WORKSPACE/\.trusted-base/'
         r'\.github/scripts/pr-review/prepare-review-history\.sh"\n'
-        r'^          if \[\[ ! -f "\$prepare_script" \]\]; then\n'
-        r'^            prepare_script="\$GITHUB_WORKSPACE/'
-        r'\.github/scripts/pr-review/prepare-review-history\.sh"\n'
-        r'^          fi\n'
-        r'^          bash "\$prepare_script"$',
-        re.MULTILINE,
+        r'.*?'
+        r'^          fi$',
+        re.MULTILINE | re.DOTALL,
     )
     blocks = [textwrap.dedent(match.group(0)) for match in pattern.finditer(workflow)]
     assert len(blocks) == 2
+    assert all('$GITHUB_WORKSPACE/.github/scripts/' not in block for block in blocks)
 
-    with tempfile.TemporaryDirectory(prefix="pr-review-bootstrap-") as tmp_name:
+    with tempfile.TemporaryDirectory(prefix="pr-review-selection-") as tmp_name:
         workspace = Path(tmp_name)
         trusted = workspace / ".trusted-base/.github/scripts/pr-review/prepare-review-history.sh"
-        head = workspace / ".github/scripts/pr-review/prepare-review-history.sh"
         trusted.parent.mkdir(parents=True)
-        head.parent.mkdir(parents=True)
         trusted.write_text('printf "%s\\n" trusted >> "$TRACE"\n')
-        head.write_text('printf "%s\\n" head >> "$TRACE"\n')
         trace = workspace / "trace"
+        runner_temp = workspace / "runner"
+        runner_temp.mkdir()
         env = os.environ.copy()
-        env.update({"GITHUB_WORKSPACE": str(workspace), "TRACE": str(trace)})
+        env.update({
+            "BASE_SHA": repo_info["base"],
+            "HEAD_SHA": repo_info["head"],
+            "GITHUB_WORKSPACE": str(workspace),
+            "RUNNER_TEMP": str(runner_temp),
+            "TRACE": str(trace),
+        })
 
         for block in blocks:
-            run(["bash", "-c", block], env=env)
+            run(["bash", "-c", block], cwd=Path(repo_info["repo"]), env=env)
         assert trace.read_text().splitlines() == ["trusted", "trusted"]
 
         trusted.unlink()
         trace.unlink()
         for block in blocks:
-            run(["bash", "-c", block], env=env)
-        assert trace.read_text().splitlines() == ["head", "head"]
+            run(["bash", "-c", block], cwd=Path(repo_info["repo"]), env=env)
+            history = json.loads((runner_temp / "review-history.json").read_text())
+            assert history == {
+                "mode": "full",
+                "reason": "trusted_preparation_unavailable",
+                "available": False,
+                "previous": None,
+            }
+            expected_diff = git(Path(repo_info["repo"]), "diff", "--find-renames",
+                                f'{repo_info["base"]}...{repo_info["head"]}')
+            assert (runner_temp / "pr.diff").read_text().rstrip() == expected_diff.rstrip()
+        assert not trace.exists()
 
 
 def main() -> None:
     workflow = WORKFLOW.read_text()
     run(["bash", "-n", str(PREPARE)])
-    test_prepare_script_bootstrap(workflow)
     with tempfile.TemporaryDirectory(prefix="pr-review-repo-") as tmp_name:
-        test_history_selection(make_repo(Path(tmp_name)))
+        repo_info = make_repo(Path(tmp_name))
+        test_prepare_script_selection(workflow, repo_info)
+        test_history_selection(repo_info)
     test_schemas(workflow)
     test_publisher_gate(workflow)
     test_extra_allowed_tools(workflow)

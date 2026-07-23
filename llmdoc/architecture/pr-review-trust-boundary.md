@@ -20,9 +20,9 @@ pull_request event
 
 - Trusted reviewer policy: exact base-SHA checkout of `pr-review/SKILL.md`, `review-sop.md`,
   `output-format.md` and `github-comment/SKILL.md` after sanitizing `.trusted-base`.
-- History-preparation code normally comes from that base-SHA checkout. When the script is first
-  introduced and absent from base, the workflow bootstraps from the event-pinned PR-head checkout;
-  subsequent reviews return to the base-pinned copy.
+- History-preparation code comes only from that base-SHA checkout. If the script is absent from
+  base, no PR-head preparation code runs; deterministic workflow commands select a complete
+  `base...head` review without historical state.
 - Reviewed/untrusted data: PR metadata, commits, full head checkout, docs, selected diff and historical comment body.
 - Trusted control data: publisher-generated state marker from the latest `github-actions` App comment,
   accepted only after schema, count, SHA and ancestry validation by the deterministic preparation step.
