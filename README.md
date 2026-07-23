@@ -101,7 +101,7 @@ jobs:
 | `issue-dispatch` | Issue 创建/打标签     | 根据标签分发到 bug-analyze / feature-review / answer-question |
 | `implement`      | 评论 `/impl` 或 `ok`  | 实现代码并创建 PR                                             |
 | `question`       | 评论 `/ask` `/q` `/?` | 回答技术问题                                                  |
-| `pr-review`      | PR 创建/更新          | 代码审查，每次覆盖完整 PR diff                                 |
+| `pr-review`      | PR 创建/更新          | 风险分级审查；默认完整 diff，可信的 1–3 个小问题修复可走增量   |
 
 ## Skills
 
@@ -111,7 +111,7 @@ jobs:
 | `bug-analyze`     | Bug 分析 | 根因定位 + 自动修复 (简单 bug) |
 | `feature-review`  | 需求评审 | 成本估算 + 影响分析 (面向产品) |
 | `implement`       | 代码实现 | 创建分支 + PR                  |
-| `pr-review`       | PR 审查  | 高信号问题 + 完整 diff 审查     |
+| `pr-review`       | PR 审查  | 高信号问题 + 风险分级全量/增量审查 |
 | `answer-question` | 问题回答 | 技术咨询                       |
 
 ## 配置项
@@ -145,6 +145,12 @@ Claude Code + Fable-5。两个 Agent 所在 job 只有仓库只读权限，不�
 GitHub token；审查评论由单独的发布 job 校验结构化结果后代发。Codex 即使退出码为
 0，只要结构化 `review_status` 为 `INCOMPLETE`，也会被视为软失败并触发 fallback；
 自由文本中的错误字样不会被误当成运行状态。
+
+每次 Agent 启动前，确定性准备步骤会使用 job 的只读 token 读取最新一条由
+`github-actions` App 发布、且带有 publisher 生成的结构化状态标记的历史 review。
+Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有 BLOCKER/MAJOR、恰有
+1–3 个 MINOR/NIT，且历史 head 是当前 head 的祖先时，才审查 `cutoff..head` 增量并
+逐条验证旧问题；其它情况一律审查完整 `base...head`。
 
 `extra_allowed_tools` 只接受 `git -C <安全路径>` 下的 `diff`、`log`、`show`、
 `status`、`rev-parse`、`merge-base` 或 `ls-files` 模式。它用于声明 monorepo/submodule
@@ -257,5 +263,5 @@ GitHub token；审查评论由单独的发布 job 校验结构化结果后代发
 
 1. **llmdoc 优先** - Agent 会先读取 `llmdoc/` 理解项目
 2. **评论折叠** - 长内容使用 `<details>` 折叠
-3. **完整审查** - PR 每次更新都重新覆盖完整 diff，避免依赖不可认证的评论状态
+3. **可信小增量** - 只有经准备步骤认证的 1–3 个小问题修复走增量，其余全部审查完整 diff
 4. **高信号** - 只标记确定的问题，避免误报

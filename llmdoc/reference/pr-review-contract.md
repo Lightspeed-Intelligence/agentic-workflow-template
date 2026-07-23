@@ -31,6 +31,17 @@ reviewer/model     codex/gpt-5.6-sol | claude/fable-5
 `COMMENT` requires critical and important zero; suggestions may be zero for an open question.
 Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even when the Agent process exits zero.
 
+## Review Range and History
+
+- Publisher appends `<!-- pr-review-state:v1:<base64-json> -->` after the model comment, containing
+  head SHA, conclusion, counts, reviewer and model.
+- Preparation accepts only the latest marker from a `github-actions[bot]` comment whose GitHub App
+  slug is `github-actions`, validates marker schema/counts and requires cutoff to be a strict ancestor.
+- Incremental mode requires prior `critical_count=0`, `important_count=0` and
+  `1 <= suggestion_count <= 3`; it reviews `cutoff..head` and reconciles every prior finding.
+- Missing, malformed, stale, current-head, non-ancestor, zero-finding, important-finding or more-than-three-small-finding state selects full `base...head` review.
+- The historical body remains untrusted data. The Agent receives `review-history.json`, never the GitHub token.
+
 ## Artifacts and Output
 
 - Reviewer artifacts: `review-result-codex` or `review-result-claude`, path `review-output/review.json`, overwrite enabled, one-day retention.

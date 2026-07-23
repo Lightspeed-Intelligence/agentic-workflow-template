@@ -41,11 +41,12 @@ Use exactly one, preserving the workflow's count/conclusion contract:
 | 项目 | 结果 |
 |------|------|
 | **结论** | APPROVE / REQUEST_CHANGES / COMMENT |
+| **审查模式** | full / incremental |
 | **审查范围** | `{range}` |
 | **Head commit** | `{current_full_sha}` |
 
-本次始终覆盖 workflow 提供的完整 `base...head` diff；该 SHA 仅用于固定代码链接，
-不得作为后续增量审查的评论状态。
+严格使用 workflow 提供的审查模式和范围；cutoff 与历史状态由 workflow 的确定性步骤认证，
+reviewer 不自行从评论推断。Head SHA 仅用于固定当前树和代码链接。
 
 {一句话总结}
 
@@ -54,10 +55,10 @@ Use exactly one, preserving the workflow's count/conclusion contract:
 {完整性声明: 据本轮审查，以上为本 PR 已知的全部阻塞级风险 / 仍有需作者确认的开放问题见下}
 
 <details>
-<summary><h3>历史问题复核 (仅增量审查时)</h3></summary>
+<summary><h3>历史问题复核</h3></summary>
 
-- {对上一轮每个 BLOCKER/MAJOR 逐条给出: 已解决 / 仍存在 / 部分解决}
-- 首次审查填「无」
+- {对上一轮每个 finding 逐条给出: 已解决 / 仍存在 / 部分解决；增量模式必须填写}
+- 没有可信历史 review 时填「无」
 
 </details>
 

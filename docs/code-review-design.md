@@ -124,7 +124,7 @@ question:
 ```mermaid
 flowchart TD
     A["Step 1: 只读 Checkout<br/>固定 PR head/base SHA<br/>不持久化 Git 凭据、不传 PAT"]
-    B["Step 2: 准备可信输入<br/>base commit 的 Skill/SOP/输出规范 + 完整本地 diff<br/>禁止读取历史评论"]
+    B["Step 2: 准备可信输入<br/>base commit 的 Skill/SOP/输出规范<br/>认证历史状态并选择 full / incremental diff"]
     C["Step 3: Codex + GPT-5.6-sol<br/>完整本地执行权限"]
     D{"Codex 进程、结构校验<br/>且无软失败信号?"}
     E["Step 4: 独立 runner<br/>Claude Code + Fable-5 fallback"]
@@ -147,7 +147,7 @@ flowchart TD
 flowchart TD
     start["从安全临时目录启动<br/>不自动加载 PR 中的配置/Hook"]
     load["加载 base commit 的 pr-review 三件套<br/>入口 + 对抗式 SOP + 输出规范"]
-    full["读取预生成的完整 base...head diff<br/>不查询历史评论状态"]
+    full["读取预生成的审查范围和历史结论<br/>Agent 不查询评论、不持有 GitHub token"]
     review["逐文件审查代码<br/>标记高信号问题"]
     json["返回结构化 JSON<br/>包含待发布 comment_body"]
     publish["发布 Job 校验结果<br/>gh pr comment 代发"]
@@ -178,11 +178,19 @@ Claude fallback 也拥有完整本地权限；可选 `extra_allowed_tools` 仅�
 
 ---
 
-## 为什么每次审完整 diff
+## 为什么只对少量小问题做增量
 
-一个 PR 可能连续 push 多次，增量审查虽然更省模型用量，但需要跨 workflow run 保存“已经审到哪个 SHA”的可信状态。普通 `GITHUB_TOKEN` 发布的评论都显示为共享的 `github-actions` bot，仓库内其它 workflow 也能使用同一身份，无法仅凭评论作者证明状态来自本审查流程。
+增量审查可以减少重复工作，但不能让 Agent 自己从自由文本评论推断截止点。publisher
+会在审查评论末尾追加由确定性代码生成的结构化状态标记；下一次运行的准备步骤使用
+job 的只读 token 读取评论，只接受 `github-actions` App 发布的最后一个合法标记，并验证
+字段类型、计数和历史 head 对当前 head 的祖先关系。原评论正文作为不可信数据写入
+`review-history.json`，token 不会传给 Agent。
 
-因此默认设计选择每次都审查完整 `base...head` diff，不读取历史评论，也不把评论当状态存储。这样会增加一些重复审查成本，但不会因为伪造截止 SHA 而漏掉未审改动。
+只有上一轮没有 BLOCKER/MAJOR、恰有 1–3 个 MINOR/NIT 时，准备步骤才生成
+`cutoff..head` 增量 diff。reviewer 必须先逐条验证旧问题，再结合当前完整 checkout
+检查回归。上一轮已通过、存在重要问题、超过三个小问题、状态缺失/伪造/过期，或 ancestry
+不成立时，全部回退到完整 `base...head`。这既避免小修复被反复全量挖问题，也不让评论
+成为未经校验的安全边界。
 
 ```mermaid
 sequenceDiagram
@@ -192,9 +200,14 @@ sequenceDiagram
 
     Dev->>AI: PR opened → 完整 base...head diff
     AI-->>Pub: 结构化审查结果
-    Pub-->>Dev: 代发审查评论
+    Pub-->>Dev: 代发评论 + 结构化历史状态
 
-    Dev->>AI: PR synchronize → 新 head 的完整 base...head diff
+    Dev->>AI: PR synchronize → 准备步骤认证历史状态
+    alt 前序仅有 1–3 个小问题
+        Dev->>AI: cutoff..head 增量 + 历史 finding
+    else 其它情况
+        Dev->>AI: 完整 base...head diff + 可用历史结论
+    end
     AI-->>Pub: 结构化审查结果
     Pub-->>Dev: 代发审查评论
 ```
@@ -228,9 +241,9 @@ graph TD
     style base fill:#e8eaf6,stroke:#3F51B5,stroke-width:2px
 ```
 
-`pr-review` 三件套把信任/发布边界、具体审查方法和输出契约分开维护。入口要求每次
-覆盖完整 diff，SOP 负责代码/文档/可观测性的对抗式交叉验证，输出规范负责 finding
-严重度与结构化计数一致。
+`pr-review` 三件套把信任/发布边界、具体审查方法和输出契约分开维护。入口要求严格
+遵循 workflow 认证的 full/incremental 范围并核对历史 finding，SOP 负责风险分级和
+代码/文档/可观测性的对抗式交叉验证，输出规范负责 finding 严重度与结构化计数一致。
 
 以 `pr-review` Skill 为例，它规定了几件事：
 
@@ -426,7 +439,7 @@ flowchart TD
 
 - **模板仓库 + Reusable Workflow** — 改一处，全局生效，多仓库接入成本极低
 - **Skill = Markdown SOP** — AI 的行为规则以 Markdown 定义，任何人都能读懂和修改
-- **完整范围优先** — 不信任共享 bot 评论状态，每次覆盖完整 PR diff
+- **完整范围优先、可信小增量** — 仅经认证的 1–3 个小问题修复走增量，其余覆盖完整 PR diff
 - **结构化输出** — JSON Schema 让 AI 的结果可编程，驱动通知和统计
 - **权限分层** — Agent 对临时 runner 高权限、对 GitHub 只读；副作用集中到确定性发布 Job
 - **主备隔离** — Codex 优先，失败时 Claude Code 在新 runner 上接手，避免环境污染

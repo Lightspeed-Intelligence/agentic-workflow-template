@@ -37,6 +37,8 @@ Also:
 - verify exact pinned CLI versions/help from local cache without downloads;
 - test permission/token, model/fallback, schema/count, artifact and trusted-checkout invariants;
 - exercise `review_status` COMPLETE/INCOMPLETE soft-failure fixtures and `extra_allowed_tools` valid/write/traversal/injection fixtures;
+- exercise history-state fixtures for trusted/untrusted author, malformed marker, stale/current/non-ancestor SHA,
+  0/1/3/4 suggestions and any critical/important count; all invalid cases must select full review;
 - verify documentation examples satisfy the same executable truth table.
 
 ## 4. Commit with Temporal Evidence
@@ -57,7 +59,8 @@ Also:
 ## Common Failure Points
 
 - Treating `permissions:` alone as proof that the Agent cannot access persisted credentials.
-- Trusting historical `github-actions` comments as authenticated incremental state.
+- Passing raw historical comments to the Agent as trusted state, or selecting incremental mode
+  without exact App identity, publisher marker, schema/count and ancestry validation.
 - Inferring completion from schema-valid prose instead of requiring structured `review_status=COMPLETE`.
 - Passing a broad `Bash(git -C repo:*)` pattern that includes write subcommands.
 - Letting docs or human output formats contradict structured count/conclusion validators.
