@@ -123,7 +123,7 @@ question:
 
 ```mermaid
 flowchart TD
-    A["Step 1: 只读 Checkout<br/>固定 PR head/base SHA<br/>不持久化 Git 凭据、不传 PAT"]
+    A["Step 1: 只读 Checkout<br/>固定 PR head/base SHA<br/>可选 PAT 读私有 submodule<br/>不持久化 Git 凭据"]
     B["Step 2: 准备可信输入<br/>base commit 的 Skill/SOP/输出规范<br/>认证历史状态并选择 full / incremental diff"]
     C["Step 3: Codex + GPT-5.6-sol<br/>完整本地执行权限"]
     D{"Codex 进程、结构校验<br/>且无软失败信号?"}
@@ -164,7 +164,7 @@ flowchart TD
 |------|------------|------|
 | 本地 Shell / 文件 / 测试工具 | 完整 | runner 是一次性环境，可自由构建、测试和分析 |
 | PR head checkout | 本地可读写 | 仅影响临时 runner，不会写回仓库 |
-| GitHub contents / pull requests | job token 只读 | token 仅供 checkout 和输入准备步骤使用 |
+| GitHub contents / pull requests | job token 只读 | GitHub token 供 checkout/输入准备；可选 PAT 仅供 checkout 读私有 submodule |
 | `gh pr comment` 等写操作 | 无 | Agent 进程不接收 GitHub token 或 PAT |
 | 发布审查评论 | 独立发布 Job | 唯一拥有 `pull-requests: write` 的非 Agent job |
 
@@ -357,7 +357,7 @@ graph TD
     subgraph review_jobs["Agent Jobs"]
         local["✅ 完整本地执行权限"]
         read["✅ contents / pull-requests: read"]
-        no_pat["❌ PAT_TOKEN"]
+        no_pat["❌ Agent 进程获取 PAT_TOKEN"]
         no_write["❌ GitHub 写 token"]
     end
 
@@ -368,6 +368,7 @@ graph TD
     end
 
     subgraph tokens["其它凭据"]
+        pat["PAT_TOKEN（可选）<br/>仅 checkout 私有 submodule"]
         ak["ANTHROPIC_API_KEY<br/>Claude 与 Codex 默认凭据"]
         oak["OPENAI_API_KEY（可选）<br/>Codex 独立凭据"]
         fw["FEISHU_WEBHOOK_TOKEN<br/>发飞书通知"]
@@ -391,7 +392,7 @@ graph TD
 
 ```mermaid
 flowchart TD
-    A["1️⃣ 配置 Secrets<br/>最少只需 ANTHROPIC_API_KEY<br/>可选为 Codex 单独配置 OPENAI_*<br/>不向审查 workflow 传 PAT"]
+    A["1️⃣ 配置 Secrets<br/>最少只需 ANTHROPIC_API_KEY<br/>可选为 Codex 配置 OPENAI_*<br/>私有 submodule 才传 PAT"]
     B["2️⃣ 添加 ci.yml<br/>复制到 .github/workflows/<br/>改一下远程引用路径即可"]
     C["3️⃣ 复制 Skills<br/>将 .claude/skills/ 目录放到仓库根目录<br/>AI 运行时需要读这些工作手册"]
     D["🎉 完成<br/>不需要装任何依赖<br/>不需要改项目代码<br/>纯配置，PR 一提就自动审查"]

@@ -93,6 +93,7 @@ jobs:
       ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
 ```
 
@@ -147,8 +148,8 @@ inputs:
 ```
 
 PR 审查优先使用 Codex + GPT-5.6-sol，Codex 链路失败时自动切换到
-Claude Code + Fable-5。两个 Agent 所在 job 只有仓库只读权限，不接收 PAT 或
-GitHub token；审查评论由单独的发布 job 校验结构化结果后代发。Codex 即使退出码为
+Claude Code + Fable-5。两个 Agent 所在 job 只有仓库只读权限，Agent 进程不接收 PAT 或
+GitHub token；可选 PAT 仅由 checkout 读取跨仓库私有 submodule，且不持久化。审查评论由单独的发布 job 校验结构化结果后代发。Codex 即使退出码为
 0，只要结构化 `review_status` 为 `INCOMPLETE`，也会被视为软失败并触发 fallback；
 自由文本中的错误字样不会被误当成运行状态。
 
@@ -171,7 +172,7 @@ Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有
 | `ANTHROPIC_BASE_URL`   | ❌   | 自定义 API 端点 (代理/私有部署)             |
 | `OPENAI_API_KEY`       | ❌   | Codex API Key；为空时回退到 `ANTHROPIC_API_KEY` |
 | `OPENAI_BASE_URL`      | ❌   | Codex API 端点；为空时回退到 `ANTHROPIC_BASE_URL` |
-| `PAT_TOKEN`            | ❌   | 其它写入型 workflow 的私有 submodule 访问；PR 审查不接收 |
+| `PAT_TOKEN`            | ❌   | 私有 submodule 访问；PR 审查仅在 checkout 使用且不注入 Agent |
 | `FEISHU_WEBHOOK_TOKEN` | ❌   | 飞书机器人 Webhook Token                    |
 
 ## 目录结构

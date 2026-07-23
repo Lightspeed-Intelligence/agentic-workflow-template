@@ -15,7 +15,9 @@
 - `OPENAI_API_KEY` and `OPENAI_BASE_URL` optional. Codex resolves each independently as
   `OPENAI_*` first, then the corresponding `ANTHROPIC_*` value; Claude always uses `ANTHROPIC_*`.
 - Feishu webhook optional.
-- `PAT_TOKEN` optional declaration for compatibility, with zero workflow references.
+- `PAT_TOKEN` optional for PR-head checkout of cross-repository private submodules. Both reviewer
+  checkouts resolve `PAT_TOKEN || github.token`, disable credential persistence, and never inject
+  PAT into an Agent process.
 
 ## Artifact Schema
 

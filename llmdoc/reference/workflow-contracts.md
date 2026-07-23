@@ -21,7 +21,8 @@
 - Optional: `ANTHROPIC_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `FEISHU_WEBHOOK_TOKEN`.
 - The optional `OPENAI_*` pair applies to PR-review Codex only and falls back per value to the
   corresponding `ANTHROPIC_*` secret; other workflows and Claude continue using `ANTHROPIC_*`.
-- `PAT_TOKEN` is for write-capable/private-submodule workflows. PR review declares it only for caller compatibility and must never reference or forward it.
+- `PAT_TOKEN` is for write-capable workflows and private-submodule checkout. PR review forwards it
+  only to `actions/checkout` with credential persistence disabled; Agent processes never receive it.
 
 ## Submodules
 
