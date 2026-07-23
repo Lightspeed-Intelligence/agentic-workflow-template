@@ -124,7 +124,7 @@ question:
 ```mermaid
 flowchart TD
     A["Step 1: 只读 Checkout<br/>固定 PR head/base SHA<br/>可选 PAT 读私有 submodule<br/>不持久化 Git 凭据"]
-    B["Step 2: 准备可信输入<br/>base commit 的 Skill/SOP/输出规范<br/>认证历史状态并选择 full / incremental diff"]
+    B["Step 2: 准备可信输入<br/>template 固定 commit 的 Skill/SOP/输出规范<br/>consumer base 的历史准备脚本<br/>选择 full / incremental diff"]
     C["Step 3: Codex + GPT-5.6-sol<br/>完整本地执行权限"]
     D{"Codex 进程、结构校验<br/>且无软失败信号?"}
     E["Step 4: 独立 runner<br/>Claude Code + Fable-5 fallback"]
@@ -296,7 +296,7 @@ Agent 的审查结果是一份结构化 JSON，评论正文也只是其中的待
 }
 ```
 
-这个 JSON 通过 CLI 的 JSON Schema 参数约束，并在发布 Job 中再次用 `jq` 校验完成状态、枚举、计数、正文长度和 reviewer/model 组合。只有 `review_status=COMPLETE` 的结果才允许评论和通知步骤消费；`INCOMPLETE` 即使伴随退出码 0 也会触发 fallback 或使最终审查失败。
+这个 JSON 通过 CLI 的 JSON Schema 参数约束，并在发布 Job 中再次用 `jq` 校验完成状态、枚举、计数、正文长度和 reviewer/model 组合。只有 `review_status=COMPLETE` 的结果才允许评论和通知步骤消费；`INCOMPLETE` 即使伴随退出码 0 也会触发 fallback 或使最终审查失败。该状态仅用于核心 diff/工作树不可访问或无法完成有意义审查的情况；单个项目测试因 runner 缺少工具或版本而未运行，应在评论中记录，但不会单独使审查失败。
 
 Agent artifact 内含 `comment_body`；reusable workflow 的公开 `structured_output` 会删除正文，但保留 `reviewer` 和 `model`，便于调用方判断实际使用的主链路或 fallback。
 

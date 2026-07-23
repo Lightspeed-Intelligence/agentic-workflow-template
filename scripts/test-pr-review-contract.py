@@ -300,11 +300,21 @@ def test_model_secret_routing(workflow: str, caller: str) -> None:
 
 def test_checkout_credentials(workflow: str, caller: str) -> None:
     checkout_token = 'token: ${{ secrets.PAT_TOKEN || github.token }}'
-    assert workflow.count(checkout_token) == 2
+    assert workflow.count(checkout_token) == 4
     assert workflow.count('token: ${{ github.token }}') == 2
-    assert workflow.count('secrets.PAT_TOKEN') == 2
-    assert workflow.count('persist-credentials: false') == 4
+    assert workflow.count('secrets.PAT_TOKEN') == 4
+    assert workflow.count('persist-credentials: false') == 6
     assert caller.count('PAT_TOKEN: ${{ secrets.PAT_TOKEN }}') == 4
+
+
+def test_trusted_policy_source(workflow: str) -> None:
+    policy_sha = "dbf05344dfc582d63a18442f81a370926a445700"
+    assert workflow.count("repository: Lightspeed-Intelligence/agentic-workflow-template") == 2
+    assert workflow.count(f"ref: {policy_sha}") == 2
+    assert workflow.count("path: .trusted-policy") == 2
+    assert workflow.count(".trusted-policy/.claude/skills/pr-review/SKILL.md") == 2
+    assert ".trusted-base/.claude/skills/" not in workflow
+    assert workflow.count("sparse-checkout: .github/scripts/pr-review/prepare-review-history.sh") == 2
 
 
 def test_prepare_script_selection(workflow: str, repo_info: dict[str, str]) -> None:
@@ -370,6 +380,7 @@ def main() -> None:
     test_extra_allowed_tools(workflow)
     test_model_secret_routing(workflow, caller)
     test_checkout_credentials(workflow, caller)
+    test_trusted_policy_source(workflow)
     print("pr-review contract fixtures passed")
 
 

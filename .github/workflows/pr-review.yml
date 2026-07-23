@@ -56,23 +56,33 @@ jobs:
           persist-credentials: false
           token: ${{ secrets.PAT_TOKEN || github.token }}
 
-      - name: Sanitize trusted checkout path
+      - name: Sanitize trusted checkout paths
         run: |
-          rm -rf -- .trusted-base
-          mkdir -p -- .trusted-base
+          rm -rf -- .trusted-base .trusted-policy
+          mkdir -p -- .trusted-base .trusted-policy
 
-      - name: Checkout trusted review skill from base commit
+      - name: Checkout trusted history script from base commit
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: .trusted-base
-          sparse-checkout: |
-            .claude/skills/pr-review
-            .claude/skills/github-comment
-            .github/scripts/pr-review/prepare-review-history.sh
+          sparse-checkout: .github/scripts/pr-review/prepare-review-history.sh
           sparse-checkout-cone-mode: false
           persist-credentials: false
           token: ${{ github.token }}
+
+      - name: Checkout trusted review policy from template revision
+        uses: actions/checkout@v5
+        with:
+          repository: Lightspeed-Intelligence/agentic-workflow-template
+          ref: dbf05344dfc582d63a18442f81a370926a445700
+          path: .trusted-policy
+          sparse-checkout: |
+            .claude/skills/pr-review
+            .claude/skills/github-comment
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+          token: ${{ secrets.PAT_TOKEN || github.token }}
 
       - name: Prepare trusted review inputs
         env:
@@ -122,7 +132,7 @@ jobs:
               "review_status": {
                 "type": "string",
                 "enum": ["COMPLETE", "INCOMPLETE"],
-                "description": "完整审查已完成时为 COMPLETE；环境、工具或权限阻止完整审查时为 INCOMPLETE"
+                "description": "核心 diff、工作树和必要上下文已完成有意义的代码审查时为 COMPLETE；核心审查材料不可访问或无法进行有意义的审查时为 INCOMPLETE"
               },
               "conclusion": {
                 "type": "string",
@@ -159,11 +169,11 @@ jobs:
           请审查 PR #${{ github.event.pull_request.number }}。
 
           审查材料已在本地准备好:
-          - 可信审查规范（三份都必须阅读）:
-            1. $GITHUB_WORKSPACE/.trusted-base/.claude/skills/pr-review/SKILL.md
-            2. $GITHUB_WORKSPACE/.trusted-base/.claude/skills/pr-review/references/review-sop.md
-            3. $GITHUB_WORKSPACE/.trusted-base/.claude/skills/pr-review/references/output-format.md
-          - 可信评论规范: $GITHUB_WORKSPACE/.trusted-base/.claude/skills/github-comment/SKILL.md
+          - 可信审查规范（来自 template 固定 revision，三份都必须阅读）:
+            1. $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/pr-review/SKILL.md
+            2. $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/pr-review/references/review-sop.md
+            3. $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/pr-review/references/output-format.md
+          - 可信评论规范: $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/github-comment/SKILL.md
           - PR 元数据: $RUNNER_TEMP/pr.json
           - 审查模式与可信历史结论: $RUNNER_TEMP/review-history.json
           - 本轮范围 diff: $RUNNER_TEMP/pr.diff
@@ -182,8 +192,9 @@ jobs:
           输出要求:
           - 最终回复只输出符合给定 JSON Schema 的对象
           - description 是不含换行的单行摘要，长度不超过 500 字符
-          - 完成完整审查时 review_status 必须为 COMPLETE；任何环境、工具或权限限制导致审查未完成时必须为 INCOMPLETE，即使进程可以正常返回 JSON
-          - comment_body 是待后续发布 job 代发的完整审查评论，使用简体中文并遵循 output-format.md
+          - 能访问核心 diff、工作树和必要上下文，并完成有意义的代码审查时，review_status 必须为 COMPLETE
+          - 仅当核心审查材料不可访问或无法进行有意义的审查时才设为 INCOMPLETE；单个项目测试因 runner 缺少工具/版本而无法执行时，记录限制但不得仅因此判定 INCOMPLETE
+          - comment_body 是待后续发布 job 代发的完整审查评论，使用简体中文并遵循 .trusted-policy 中的 output-format.md
           - APPROVE 仅当三个问题计数均为 0；critical_count 或 important_count 非 0 时必须 REQUEST_CHANGES
           - 代码链接必须使用完整 head commit SHA，不得使用分支名
           PROMPT_EOF
@@ -285,23 +296,33 @@ jobs:
           persist-credentials: false
           token: ${{ secrets.PAT_TOKEN || github.token }}
 
-      - name: Sanitize trusted checkout path
+      - name: Sanitize trusted checkout paths
         run: |
-          rm -rf -- .trusted-base
-          mkdir -p -- .trusted-base
+          rm -rf -- .trusted-base .trusted-policy
+          mkdir -p -- .trusted-base .trusted-policy
 
-      - name: Checkout trusted review skill from base commit
+      - name: Checkout trusted history script from base commit
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: .trusted-base
-          sparse-checkout: |
-            .claude/skills/pr-review
-            .claude/skills/github-comment
-            .github/scripts/pr-review/prepare-review-history.sh
+          sparse-checkout: .github/scripts/pr-review/prepare-review-history.sh
           sparse-checkout-cone-mode: false
           persist-credentials: false
           token: ${{ github.token }}
+
+      - name: Checkout trusted review policy from template revision
+        uses: actions/checkout@v5
+        with:
+          repository: Lightspeed-Intelligence/agentic-workflow-template
+          ref: dbf05344dfc582d63a18442f81a370926a445700
+          path: .trusted-policy
+          sparse-checkout: |
+            .claude/skills/pr-review
+            .claude/skills/github-comment
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+          token: ${{ secrets.PAT_TOKEN || github.token }}
 
       - name: Prepare trusted review inputs
         env:
@@ -351,7 +372,7 @@ jobs:
               "review_status": {
                 "type": "string",
                 "enum": ["COMPLETE", "INCOMPLETE"],
-                "description": "完整审查已完成时为 COMPLETE；环境、工具或权限阻止完整审查时为 INCOMPLETE"
+                "description": "核心 diff、工作树和必要上下文已完成有意义的代码审查时为 COMPLETE；核心审查材料不可访问或无法进行有意义的审查时为 INCOMPLETE"
               },
               "conclusion": {
                 "type": "string",
@@ -388,11 +409,11 @@ jobs:
           Codex 主链路失败。请作为 fallback 审查 PR #${{ github.event.pull_request.number }}。
 
           审查材料已在本地准备好:
-          - 可信审查规范（三份都必须阅读）:
-            1. $GITHUB_WORKSPACE/.trusted-base/.claude/skills/pr-review/SKILL.md
-            2. $GITHUB_WORKSPACE/.trusted-base/.claude/skills/pr-review/references/review-sop.md
-            3. $GITHUB_WORKSPACE/.trusted-base/.claude/skills/pr-review/references/output-format.md
-          - 可信评论规范: $GITHUB_WORKSPACE/.trusted-base/.claude/skills/github-comment/SKILL.md
+          - 可信审查规范（来自 template 固定 revision，三份都必须阅读）:
+            1. $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/pr-review/SKILL.md
+            2. $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/pr-review/references/review-sop.md
+            3. $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/pr-review/references/output-format.md
+          - 可信评论规范: $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/github-comment/SKILL.md
           - PR 元数据: $RUNNER_TEMP/pr.json
           - 审查模式与可信历史结论: $RUNNER_TEMP/review-history.json
           - 本轮范围 diff: $RUNNER_TEMP/pr.diff
@@ -411,8 +432,9 @@ jobs:
           输出要求:
           - 最终回复只输出符合给定 JSON Schema 的对象
           - description 是不含换行的单行摘要，长度不超过 500 字符
-          - 完成完整审查时 review_status 必须为 COMPLETE；任何环境、工具或权限限制导致审查未完成时必须为 INCOMPLETE，即使进程可以正常返回 JSON
-          - comment_body 是待后续发布 job 代发的完整审查评论，使用简体中文并遵循 output-format.md
+          - 能访问核心 diff、工作树和必要上下文，并完成有意义的代码审查时，review_status 必须为 COMPLETE
+          - 仅当核心审查材料不可访问或无法进行有意义的审查时才设为 INCOMPLETE；单个项目测试因 runner 缺少工具/版本而无法执行时，记录限制但不得仅因此判定 INCOMPLETE
+          - comment_body 是待后续发布 job 代发的完整审查评论，使用简体中文并遵循 .trusted-policy 中的 output-format.md
           - APPROVE 仅当三个问题计数均为 0；critical_count 或 important_count 非 0 时必须 REQUEST_CHANGES
           - 代码链接必须使用完整 head commit SHA，不得使用分支名
           PROMPT_EOF
