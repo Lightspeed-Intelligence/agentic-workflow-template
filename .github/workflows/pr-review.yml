@@ -137,15 +137,19 @@ jobs:
           - 代码链接必须使用完整 head commit SHA，不得使用分支名
           PROMPT_EOF
 
+      - name: Install pinned Codex CLI without lifecycle scripts
+        run: |
+          CODEX_INSTALL_DIR="$RUNNER_TEMP/codex-0.145.0"
+          npm install --ignore-scripts --no-audit --no-fund \
+            --prefix "$CODEX_INSTALL_DIR" @openai/codex@0.145.0
+          "$CODEX_INSTALL_DIR/node_modules/.bin/codex" --version
+
       - name: Review with Codex and GPT-5.6-sol
         env:
           OPENAI_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
         run: |
-          CODEX_INSTALL_DIR="$RUNNER_TEMP/codex-0.145.0"
-          npm install --prefix "$CODEX_INSTALL_DIR" @openai/codex@0.145.0
-          CODEX_PATH="$CODEX_INSTALL_DIR/node_modules/.bin/codex"
-          "$CODEX_PATH" --version
+          CODEX_PATH="$RUNNER_TEMP/codex-0.145.0/node_modules/.bin/codex"
 
           export CODEX_HOME="$RUNNER_TEMP/codex-home"
           mkdir -p "$CODEX_HOME"
@@ -304,6 +308,13 @@ jobs:
           - 代码链接必须使用完整 head commit SHA，不得使用分支名
           PROMPT_EOF
 
+      - name: Install pinned Claude Code CLI without lifecycle scripts
+        run: |
+          CLAUDE_INSTALL_DIR="$RUNNER_TEMP/claude-code-2.1.148"
+          npm install --ignore-scripts --no-audit --no-fund \
+            --prefix "$CLAUDE_INSTALL_DIR" @anthropic-ai/claude-code@2.1.148
+          "$CLAUDE_INSTALL_DIR/node_modules/.bin/claude" --version
+
       - name: Review with Claude Code and Fable-5
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -315,10 +326,7 @@ jobs:
           BASE_URL="${ANTHROPIC_BASE_URL:-https://llm.fantacy.live}"
           export ANTHROPIC_BASE_URL="${BASE_URL%/}"
 
-          CLAUDE_INSTALL_DIR="$RUNNER_TEMP/claude-code-2.1.148"
-          npm install --prefix "$CLAUDE_INSTALL_DIR" @anthropic-ai/claude-code@2.1.148
-          CLAUDE_PATH="$CLAUDE_INSTALL_DIR/node_modules/.bin/claude"
-          "$CLAUDE_PATH" --version
+          CLAUDE_PATH="$RUNNER_TEMP/claude-code-2.1.148/node_modules/.bin/claude"
 
           SCHEMA=$(jq -c . "$RUNNER_TEMP/review-schema.json")
           RAW_RESULT="$RUNNER_TEMP/claude-result.json"

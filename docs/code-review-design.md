@@ -124,7 +124,7 @@ question:
 ```mermaid
 flowchart TD
     A["Step 1: 只读 Checkout<br/>固定 PR head/base SHA<br/>不持久化 Git 凭据、不传 PAT"]
-    B["Step 2: 准备可信输入<br/>base commit 的 Skill + 本地 diff<br/>历史评论由只读步骤预取"]
+    B["Step 2: 准备可信输入<br/>base commit 的 Skill + 完整本地 diff<br/>禁止读取历史评论"]
     C["Step 3: Codex + GPT-5.6-sol<br/>完整本地执行权限"]
     D{"Codex 成功?"}
     E["Step 4: 独立 runner<br/>Claude Code + Fable-5 fallback"]
