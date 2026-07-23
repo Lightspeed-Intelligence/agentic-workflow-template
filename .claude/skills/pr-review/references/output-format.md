@@ -1,14 +1,16 @@
 # PR Review Output Format
 
-The final answer must be the GitHub PR comment body in Simplified Chinese.
+The model's final response remains the workflow-defined JSON object. Its `comment_body` field
+must contain the complete GitHub PR comment body in Simplified Chinese; do not emit Markdown
+outside that JSON object.
 
 ## Conclusion Values
 
-Choose by the overall merge judgment (see `references/review-sop.md`), not by a raw count of findings. Use exactly one:
+Use exactly one, preserving the workflow's count/conclusion contract:
 
-- `APPROVE`: no genuine blocker. Non-blocking MINOR/NIT items, or MAJOR items that are recommendations rather than correctness/safety failures, do not by themselves prevent APPROVE. Finding nothing on a low-risk PR is a normal APPROVE.
-- `REQUEST_CHANGES`: at least one genuine BLOCKER exists — code that can break correctness, safety, data integrity, security, or deployment as written. A pile of low-severity or gate-driven items does not add up to REQUEST_CHANGES when no single item is merge-blocking.
-- `COMMENT`: no blocker, but there are worthwhile suggestions or unresolved questions the author should weigh.
+- `APPROVE`: BLOCKER、MAJOR、MINOR、NIT 和开放问题均为 0。
+- `REQUEST_CHANGES`: 至少存在一个 BLOCKER 或 MAJOR。
+- `COMMENT`: 没有 BLOCKER/MAJOR，但存在 MINOR、NIT 或需要记录的开放问题。
 
 ## Severity
 
@@ -17,18 +19,22 @@ Choose by the overall merge judgment (see `references/review-sop.md`), not by a 
 - **MINOR**: useful cleanup or narrow risk.
 - **NIT**: small style or clarity issue worth mentioning only if it improves the patch.
 
+结构化计数必须与正文一致：BLOCKER → `critical_count`，MAJOR →
+`important_count`，MINOR/NIT → `suggestion_count`。开放问题不得伪装成已确认 finding。
+
 ## Required Structure
 
 ```markdown
-## Codex PR 审查
+## PR 审查
 
 | 项目 | 结果 |
 |------|------|
 | **结论** | APPROVE / REQUEST_CHANGES / COMMENT |
 | **审查范围** | `{range}` |
-| **审查截止** | `{current_full_sha}` |
+| **Head commit** | `{current_full_sha}` |
 
-审查截止: {current_full_sha}
+本次始终覆盖 workflow 提供的完整 `base...head` diff；该 SHA 仅用于固定代码链接，
+不得作为后续增量审查的评论状态。
 
 {一句话总结}
 

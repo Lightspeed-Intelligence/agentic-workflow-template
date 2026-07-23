@@ -21,11 +21,14 @@ Always answer in 简体中文
 
 ```
 llmdoc/
-├── index.md          # 索引，必读
-├── overview/         # 项目概述，必读
-├── guides/           # 操作指南
-├── architecture/     # 架构设计
-└── reference/        # 参考资料
+├── index.md          # 全局索引，第一入口
+├── startup.md        # 每次运行的阅读顺序
+├── must/             # 反复适用的强制上下文
+├── overview/         # 项目身份与边界
+├── guides/           # 单一工作流操作指南
+├── architecture/     # 架构、所有权与不变量
+├── reference/        # 稳定事实与契约
+└── memory/           # 决策、反思与文档缺口
 ```
 
 ## 链接格式

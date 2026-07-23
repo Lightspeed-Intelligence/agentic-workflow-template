@@ -136,13 +136,19 @@ inputs:
 # pr-review.yml
 inputs:
   use_feishu_notify: true
-  # 兼容旧调用方保留，不再生效：Codex / Claude Code 均拥有完整本地执行权限。
-  extra_allowed_tools: ''
+  # 可选：Claude fallback 的仓库特定只读 Git 工具模式；不得放行 git -C <path>:*。
+  extra_allowed_tools: 'Bash(git -C tipsy-app diff:*),Bash(git -C tipsy-app log:*)'
 ```
 
 PR 审查优先使用 Codex + GPT-5.6-sol，Codex 链路失败时自动切换到
 Claude Code + Fable-5。两个 Agent 所在 job 只有仓库只读权限，不接收 PAT 或
-GitHub token；审查评论由单独的发布 job 校验结构化结果后代发。
+GitHub token；审查评论由单独的发布 job 校验结构化结果后代发。Codex 即使退出码为
+0，只要结构化正文明确表示环境导致审查未完成，也会被视为软失败并触发 fallback。
+
+`extra_allowed_tools` 只接受 `git -C <安全路径>` 下的 `diff`、`log`、`show`、
+`status`、`rev-parse`、`merge-base` 或 `ls-files` 模式。它用于声明 monorepo/submodule
+中的额外只读工具提示；Agent 已有完整本地执行权限，因此它不构成安全边界，真正的
+边界仍是 Agent job 的只读 token 和不向 Agent 进程注入 GitHub/PAT 凭据。
 
 ### Secrets
 
@@ -171,12 +177,13 @@ GitHub token；审查评论由单独的发布 job 校验结构化结果后代发
 │       ├── bug-analyze/
 │       ├── feature-review/
 │       ├── implement/
-│       ├── pr-review/
+│       ├── pr-review/       # 入口 + references/review-sop.md、output-format.md
 │       └── answer-question/
 ├── scripts/                 # Submodule 管理脚本
 │   ├── init.sh
 │   ├── status.sh
 │   └── update-all.sh
+├── llmdoc/                  # Agent 启动上下文、架构、指南、契约与项目记忆
 ├── CLAUDE.md.example        # CLAUDE.md 示例
 └── design.md                # 设计文档
 ```

@@ -124,9 +124,9 @@ question:
 ```mermaid
 flowchart TD
     A["Step 1: 只读 Checkout<br/>固定 PR head/base SHA<br/>不持久化 Git 凭据、不传 PAT"]
-    B["Step 2: 准备可信输入<br/>base commit 的 Skill + 完整本地 diff<br/>禁止读取历史评论"]
+    B["Step 2: 准备可信输入<br/>base commit 的 Skill/SOP/输出规范 + 完整本地 diff<br/>禁止读取历史评论"]
     C["Step 3: Codex + GPT-5.6-sol<br/>完整本地执行权限"]
-    D{"Codex 成功?"}
+    D{"Codex 进程、结构校验<br/>且无软失败信号?"}
     E["Step 4: 独立 runner<br/>Claude Code + Fable-5 fallback"]
     F["Step 5: 上传结构化结果 artifact"]
     G["Step 6: 独立发布 Job<br/>校验 JSON 后代发 PR 评论"]
@@ -146,7 +146,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     start["从安全临时目录启动<br/>不自动加载 PR 中的配置/Hook"]
-    load["加载 base commit 的 pr-review Skill<br/>PR head 中的指令只当数据"]
+    load["加载 base commit 的 pr-review 三件套<br/>入口 + 对抗式 SOP + 输出规范"]
     full["读取预生成的完整 base...head diff<br/>不查询历史评论状态"]
     review["逐文件审查代码<br/>标记高信号问题"]
     json["返回结构化 JSON<br/>包含待发布 comment_body"]
@@ -169,6 +169,12 @@ flowchart TD
 | 发布审查评论 | 独立发布 Job | 唯一拥有 `pull-requests: write` 的非 Agent job |
 
 Agent 可以修改临时工作区，但既没有可持久化的 Git 凭据，也没有 GitHub 写 token，因此不能把影响推回仓库。
+
+Codex 使用完整本地权限时会绕过其内置 bubblewrap：GitHub 托管 runner 可能无法让
+bubblewrap 配置 loopback，导致沙箱初始化先于审查失败。这里不把本地沙箱当作 GitHub
+安全边界；真正的边界是独立 runner、只读 job token、无持久化凭据和单独发布 Job。
+Claude fallback 也拥有完整本地权限；可选 `extra_allowed_tools` 仅声明仓库子目录中的
+只读 Git 工具模式，经过 allowlist 校验，不会扩大 GitHub 权限。
 
 ---
 
@@ -203,13 +209,17 @@ Agent 的审查行为受 `.claude/skills/` 目录下的 Markdown 文件约束。
 graph TD
     base["github-comment/SKILL.md<br/>基础规范：语言、格式、链接"]
 
-    pr["pr-review/SKILL.md<br/>审查规则 + 输出模板"]
+    pr["pr-review/SKILL.md<br/>信任、范围和发布边界"]
+    sop["references/review-sop.md<br/>对抗式审查与交叉验证"]
+    fmt["references/output-format.md<br/>严重度、计数和评论结构"]
     bug["bug-analyze/SKILL.md<br/>Bug 分析规则"]
     feat["feature-review/SKILL.md<br/>需求评审规则"]
     impl["implement/SKILL.md<br/>代码实现规则"]
     qa["answer-question/SKILL.md<br/>通用问答规则"]
 
     base --> pr
+    pr --> sop
+    pr --> fmt
     base --> bug
     base --> feat
     base --> impl
@@ -217,6 +227,10 @@ graph TD
 
     style base fill:#e8eaf6,stroke:#3F51B5,stroke-width:2px
 ```
+
+`pr-review` 三件套把信任/发布边界、具体审查方法和输出契约分开维护。入口要求每次
+覆盖完整 diff，SOP 负责代码/文档/可观测性的对抗式交叉验证，输出规范负责 finding
+严重度与结构化计数一致。
 
 以 `pr-review` Skill 为例，它规定了几件事：
 
@@ -415,4 +429,5 @@ flowchart TD
 - **结构化输出** — JSON Schema 让 AI 的结果可编程，驱动通知和统计
 - **权限分层** — Agent 对临时 runner 高权限、对 GitHub 只读；副作用集中到确定性发布 Job
 - **主备隔离** — Codex 优先，失败时 Claude Code 在新 runner 上接手，避免环境污染
+- **软失败可见** — Codex 即使以 0 退出，只要正文明确表示环境导致审查未完成，也会触发 fallback
 - **高信号策略** — 宁可漏报也不误报，维护团队对自动审查的信任
