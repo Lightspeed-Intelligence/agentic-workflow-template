@@ -34,6 +34,8 @@ pull_request event
 - `codex_review` and `claude_review`: only `contents: read` and `pull-requests: read`.
 - Reviewer checkouts use `persist-credentials: false`; a preparation step receives the read-only job
   token to query comments, while Agent processes receive model credentials but no GitHub/PAT token.
+- Codex prefers optional `OPENAI_API_KEY` and `OPENAI_BASE_URL`; each missing value independently
+  falls back to its `ANTHROPIC_*` counterpart. Claude receives only the `ANTHROPIC_*` pair.
 - `PAT_TOKEN` remains an unused compatibility declaration in PR review and is not forwarded by the local caller.
 - `publish`: receives GitHub PR-write authority and optional Feishu webhook, but no model key and no PR-head checkout.
 

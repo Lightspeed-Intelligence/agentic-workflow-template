@@ -20,6 +20,11 @@ on:
         required: true
       ANTHROPIC_BASE_URL:
         required: false
+      # Codex 可单独使用 OpenAI 兼容端点；未设置时逐项回退到 ANTHROPIC_* 以兼容旧调用方。
+      OPENAI_API_KEY:
+        required: false
+      OPENAI_BASE_URL:
+        required: false
       # 仅为兼容仍显式传参的旧调用方；workflow 内禁止引用或注入此 secret。
       PAT_TOKEN:
         required: false
@@ -192,14 +197,14 @@ jobs:
 
       - name: Review with Codex and GPT-5.6-sol
         env:
-          OPENAI_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || secrets.ANTHROPIC_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL || secrets.ANTHROPIC_BASE_URL }}
         run: |
           CODEX_PATH="$RUNNER_TEMP/codex-0.145.0/node_modules/.bin/codex"
 
           export CODEX_HOME="$RUNNER_TEMP/codex-home"
           mkdir -p "$CODEX_HOME"
-          BASE_URL="${ANTHROPIC_BASE_URL:-https://llm.fantacy.live}"
+          BASE_URL="${OPENAI_BASE_URL:-https://llm.fantacy.live}"
           cat > "$CODEX_HOME/config.toml" <<EOF
           model = "gpt-5.6-sol"
           model_provider = "gateway"

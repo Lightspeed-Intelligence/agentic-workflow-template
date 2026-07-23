@@ -19,6 +19,10 @@ gh secret set ANTHROPIC_API_KEY
 # 可选 (自定义 API 端点)
 gh secret set ANTHROPIC_BASE_URL
 
+# 可选 (PR 审查为 Codex 单独配置；未设置时回退到对应的 ANTHROPIC_* Secret)
+gh secret set OPENAI_API_KEY
+gh secret set OPENAI_BASE_URL
+
 # 可选 (私有 submodule 访问)
 gh secret set PAT_TOKEN
 
@@ -87,6 +91,8 @@ jobs:
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
       FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
 ```
 
@@ -163,6 +169,8 @@ Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有
 | ---------------------- | ---- | ------------------------------------------- |
 | `ANTHROPIC_API_KEY`    | ✅   | Anthropic API Key                           |
 | `ANTHROPIC_BASE_URL`   | ❌   | 自定义 API 端点 (代理/私有部署)             |
+| `OPENAI_API_KEY`       | ❌   | Codex API Key；为空时回退到 `ANTHROPIC_API_KEY` |
+| `OPENAI_BASE_URL`      | ❌   | Codex API 端点；为空时回退到 `ANTHROPIC_BASE_URL` |
 | `PAT_TOKEN`            | ❌   | 其它写入型 workflow 的私有 submodule 访问；PR 审查不接收 |
 | `FEISHU_WEBHOOK_TOKEN` | ❌   | 飞书机器人 Webhook Token                    |
 
