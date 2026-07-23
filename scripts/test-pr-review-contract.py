@@ -281,10 +281,47 @@ def test_extra_allowed_tools(workflow: str) -> None:
     assert not any(accepts(value) for value in invalid)
 
 
+def test_prepare_script_bootstrap(workflow: str) -> None:
+    pattern = re.compile(
+        r'^          prepare_script="\$GITHUB_WORKSPACE/\.trusted-base/'
+        r'\.github/scripts/pr-review/prepare-review-history\.sh"\n'
+        r'^          if \[\[ ! -f "\$prepare_script" \]\]; then\n'
+        r'^            prepare_script="\$GITHUB_WORKSPACE/'
+        r'\.github/scripts/pr-review/prepare-review-history\.sh"\n'
+        r'^          fi\n'
+        r'^          bash "\$prepare_script"$',
+        re.MULTILINE,
+    )
+    blocks = [textwrap.dedent(match.group(0)) for match in pattern.finditer(workflow)]
+    assert len(blocks) == 2
+
+    with tempfile.TemporaryDirectory(prefix="pr-review-bootstrap-") as tmp_name:
+        workspace = Path(tmp_name)
+        trusted = workspace / ".trusted-base/.github/scripts/pr-review/prepare-review-history.sh"
+        head = workspace / ".github/scripts/pr-review/prepare-review-history.sh"
+        trusted.parent.mkdir(parents=True)
+        head.parent.mkdir(parents=True)
+        trusted.write_text('printf "%s\\n" trusted >> "$TRACE"\n')
+        head.write_text('printf "%s\\n" head >> "$TRACE"\n')
+        trace = workspace / "trace"
+        env = os.environ.copy()
+        env.update({"GITHUB_WORKSPACE": str(workspace), "TRACE": str(trace)})
+
+        for block in blocks:
+            run(["bash", "-c", block], env=env)
+        assert trace.read_text().splitlines() == ["trusted", "trusted"]
+
+        trusted.unlink()
+        trace.unlink()
+        for block in blocks:
+            run(["bash", "-c", block], env=env)
+        assert trace.read_text().splitlines() == ["head", "head"]
+
+
 def main() -> None:
     workflow = WORKFLOW.read_text()
     run(["bash", "-n", str(PREPARE)])
-    assert workflow.count(".github/scripts/pr-review/prepare-review-history.sh") == 4
+    test_prepare_script_bootstrap(workflow)
     with tempfile.TemporaryDirectory(prefix="pr-review-repo-") as tmp_name:
         test_history_selection(make_repo(Path(tmp_name)))
     test_schemas(workflow)

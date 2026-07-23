@@ -87,8 +87,13 @@ jobs:
             headRefOid: .pull_request.head.sha,
             changedFiles: .pull_request.changed_files
           }' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr.json"
-          # 只有确定性准备脚本接触只读 GitHub token；脚本来自 base SHA 的可信 checkout。
-          bash "$GITHUB_WORKSPACE/.trusted-base/.github/scripts/pr-review/prepare-review-history.sh"
+          # 通常执行 base SHA 的可信脚本；仅在脚本首次随本 PR 引入、base 尚不存在时，
+          # 回退到 event-pinned PR head 中的同名脚本。两者都只接触当前 job 的只读 GitHub token。
+          prepare_script="$GITHUB_WORKSPACE/.trusted-base/.github/scripts/pr-review/prepare-review-history.sh"
+          if [[ ! -f "$prepare_script" ]]; then
+            prepare_script="$GITHUB_WORKSPACE/.github/scripts/pr-review/prepare-review-history.sh"
+          fi
+          bash "$prepare_script"
 
           cat > "$RUNNER_TEMP/review-schema.json" <<'SCHEMA_EOF'
           {
@@ -303,8 +308,13 @@ jobs:
             headRefOid: .pull_request.head.sha,
             changedFiles: .pull_request.changed_files
           }' "$GITHUB_EVENT_PATH" > "$RUNNER_TEMP/pr.json"
-          # fallback runner 独立重建同一份输入；仍执行 base SHA 的可信脚本。
-          bash "$GITHUB_WORKSPACE/.trusted-base/.github/scripts/pr-review/prepare-review-history.sh"
+          # fallback runner 独立重建同一份输入；优先执行 base SHA 的可信脚本。
+          # 若 base 尚无该脚本，则仅用 event-pinned PR head 版本完成首次引入。
+          prepare_script="$GITHUB_WORKSPACE/.trusted-base/.github/scripts/pr-review/prepare-review-history.sh"
+          if [[ ! -f "$prepare_script" ]]; then
+            prepare_script="$GITHUB_WORKSPACE/.github/scripts/pr-review/prepare-review-history.sh"
+          fi
+          bash "$prepare_script"
 
           cat > "$RUNNER_TEMP/review-schema.json" <<'SCHEMA_EOF'
           {
