@@ -82,7 +82,7 @@ jobs:
           {
             "type": "object",
             "properties": {
-              "description": { "type": "string", "minLength": 1 },
+              "description": { "type": "string", "minLength": 1, "maxLength": 500 },
               "conclusion": {
                 "type": "string",
                 "enum": ["APPROVE", "REQUEST_CHANGES", "COMMENT"]
@@ -253,7 +253,7 @@ jobs:
           {
             "type": "object",
             "properties": {
-              "description": { "type": "string", "minLength": 1 },
+              "description": { "type": "string", "minLength": 1, "maxLength": 500 },
               "conclusion": {
                 "type": "string",
                 "enum": ["APPROVE", "REQUEST_CHANGES", "COMMENT"]
@@ -403,7 +403,7 @@ jobs:
         run: |
           jq -e '
             (type == "object") and
-            (.description | type == "string" and length > 0) and
+            (.description | type == "string" and length > 0 and length <= 500 and (test("[\\r\\n]") | not)) and
             (.conclusion | IN("APPROVE", "REQUEST_CHANGES", "COMMENT")) and
             (.critical_count | type == "number" and . >= 0 and floor == .) and
             (.important_count | type == "number" and . >= 0 and floor == .) and
@@ -434,6 +434,12 @@ jobs:
 
           STRUCTURED_OUTPUT=$(jq -c 'del(.comment_body)' "$REVIEW_FILE")
           echo "structured_output=$STRUCTURED_OUTPUT" >> "$GITHUB_OUTPUT"
+          echo "conclusion=$(jq -r '.conclusion' "$REVIEW_FILE")" >> "$GITHUB_OUTPUT"
+          echo "description=$(jq -r '.description' "$REVIEW_FILE")" >> "$GITHUB_OUTPUT"
+          echo "critical_count=$(jq -r '.critical_count' "$REVIEW_FILE")" >> "$GITHUB_OUTPUT"
+          echo "important_count=$(jq -r '.important_count' "$REVIEW_FILE")" >> "$GITHUB_OUTPUT"
+          echo "suggestion_count=$(jq -r '.suggestion_count' "$REVIEW_FILE")" >> "$GITHUB_OUTPUT"
+          echo "reviewer=$REVIEWER" >> "$GITHUB_OUTPUT"
           {
             echo "## PR Review Result"
             echo '```json'
@@ -441,70 +447,101 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Parse review output for notification
-        if: always() && inputs.use_feishu_notify
-        id: parse
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          if [ -s .review-input/review.json ]; then
-            CONCLUSION=$(jq -r '.conclusion // "UNKNOWN"' .review-input/review.json)
-            DESCRIPTION=$(jq -r '.description // "审查完成"' .review-input/review.json)
-            CRITICAL=$(jq -r '.critical_count // 0' .review-input/review.json)
-            IMPORTANT=$(jq -r '.important_count // 0' .review-input/review.json)
-            SUGGESTION=$(jq -r '.suggestion_count // 0' .review-input/review.json)
-            REVIEWER=$(jq -r '.reviewer // "unknown"' .review-input/review.json)
-          else
-            CONCLUSION="UNKNOWN"
-            DESCRIPTION="Codex 与 Claude Code 审查链路均未成功"
-            CRITICAL=0
-            IMPORTANT=0
-            SUGGESTION=0
-            REVIEWER="none"
-          fi
-
-          case "$CONCLUSION" in
-            "APPROVE") STATUS="success" ;;
-            "REQUEST_CHANGES") STATUS="error" ;;
-            "UNKNOWN") STATUS="warning" ;;
-            *) STATUS="info" ;;
-          esac
-
-          [ "$REVIEWER" = "claude" ] && DESCRIPTION="${DESCRIPTION}（Claude Code fallback）"
-          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
-          echo "title=PR 审查: $CONCLUSION" >> "$GITHUB_OUTPUT"
-          {
-            echo 'description<<EOF'
-            echo "**${{ github.repository }}** PR #${{ github.event.pull_request.number }}"
-            echo "*$PR_TITLE*"
-            echo "$DESCRIPTION"
-            echo "🔴 $CRITICAL | 🟠 $IMPORTANT | 🟢 $SUGGESTION"
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Checkout notification action
-        if: always() && inputs.use_feishu_notify
-        uses: actions/checkout@v5
-        with:
-          repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: main
-          path: .agentic-actions
-          sparse-checkout: .github/actions
-          sparse-checkout-cone-mode: false
-          persist-credentials: false
-          token: ${{ github.token }}
-
       - name: Notify Feishu
         if: always() && inputs.use_feishu_notify
         continue-on-error: true
-        uses: ./.agentic-actions/.github/actions/feishu-notify
-        with:
-          webhook_token: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
-          title: ${{ steps.parse.outputs.title }}
-          description: ${{ steps.parse.outputs.description }}
-          link_text: "🔗 查看 PR"
-          link_url: ${{ github.event.pull_request.html_url }}
-          status: ${{ steps.parse.outputs.status }}
+        env:
+          WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
+          RESULT_OUTCOME: ${{ steps.result.outcome }}
+          CONCLUSION: ${{ steps.result.outputs.conclusion }}
+          REVIEW_DESCRIPTION: ${{ steps.result.outputs.description }}
+          CRITICAL: ${{ steps.result.outputs.critical_count }}
+          IMPORTANT: ${{ steps.result.outputs.important_count }}
+          SUGGESTION: ${{ steps.result.outputs.suggestion_count }}
+          REVIEWER: ${{ steps.result.outputs.reviewer }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          if [ -z "$WEBHOOK_TOKEN" ]; then
+            echo "::notice::未配置 FEISHU_WEBHOOK_TOKEN，跳过通知"
+            exit 0
+          fi
+
+          if [ "$RESULT_OUTCOME" = "success" ]; then
+            DESCRIPTION="$REVIEW_DESCRIPTION"
+            [ "$REVIEWER" = "claude" ] && DESCRIPTION="${DESCRIPTION}（Claude Code fallback）"
+            case "$CONCLUSION" in
+              "APPROVE") STATUS="success" ;;
+              "REQUEST_CHANGES") STATUS="error" ;;
+              *) STATUS="info" ;;
+            esac
+          else
+            CONCLUSION="UNKNOWN"
+            DESCRIPTION="PR 审查流程失败，详情见 workflow run"
+            CRITICAL=0
+            IMPORTANT=0
+            SUGGESTION=0
+            STATUS="warning"
+          fi
+
+          case "$STATUS" in
+            "success") EMOJI="✅"; TEMPLATE="green" ;;
+            "warning") EMOJI="⚠️"; TEMPLATE="orange" ;;
+            "error")   EMOJI="❌"; TEMPLATE="red" ;;
+            *)         EMOJI="ℹ️"; TEMPLATE="blue" ;;
+          esac
+
+          CARD_DESCRIPTION=$(jq -nr \
+            --arg repository "$REPOSITORY" \
+            --arg number "$PR_NUMBER" \
+            --arg pr_title "$PR_TITLE" \
+            --arg description "$DESCRIPTION" \
+            --arg critical "$CRITICAL" \
+            --arg important "$IMPORTANT" \
+            --arg suggestion "$SUGGESTION" \
+            '"**\($repository)** PR #\($number)\n*\($pr_title)*\n\($description)\n🔴 \($critical) | 🟠 \($important) | 🟢 \($suggestion)"')
+          PAYLOAD=$(jq -n \
+            --arg title "${EMOJI} PR 审查: ${CONCLUSION}" \
+            --arg template "$TEMPLATE" \
+            --arg desc "$CARD_DESCRIPTION" \
+            --arg link_url "$PR_URL" \
+            '{
+              msg_type: "interactive",
+              card: {
+                header: {
+                  title: {tag: "plain_text", content: $title},
+                  template: $template
+                },
+                elements: [
+                  {tag: "div", text: {tag: "lark_md", content: $desc}},
+                  {tag: "action", actions: [{tag: "button", text: {tag: "plain_text", content: "🔗 查看 PR"}, type: "primary", url: $link_url}]}
+                ]
+              }
+            }')
+
+          MAX_ATTEMPTS=4
+          DELAYS=(0 5 15 30)
+          RESP=""
+          for i in $(seq 1 "$MAX_ATTEMPTS"); do
+            sleep "${DELAYS[$((i-1))]}"
+            RESP=$(curl -sS --max-time 15 -X POST \
+              "https://open.feishu.cn/open-apis/bot/v2/hook/${WEBHOOK_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$PAYLOAD" || true)
+            CODE=$(jq -r '.code // empty' <<<"$RESP" 2>/dev/null || true)
+            if [ "$CODE" = "0" ]; then
+              echo "飞书通知发送成功 (第 ${i}/${MAX_ATTEMPTS} 次尝试)"
+              exit 0
+            fi
+            echo "::warning::飞书通知第 ${i}/${MAX_ATTEMPTS} 次发送失败: ${RESP:-网络错误/无响应}"
+            if [ -n "$CODE" ] && [ "$CODE" != "11232" ]; then
+              break
+            fi
+          done
+          echo "::error::飞书通知发送失败: ${RESP:-网络错误/无响应}"
+          exit 1
 
       - name: Fail when no reviewer succeeded
         if: always() && needs.codex_review.result != 'success' && needs.claude_review.result != 'success'

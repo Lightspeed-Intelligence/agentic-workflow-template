@@ -287,7 +287,7 @@ flowchart LR
 
 ## 飞书通知
 
-飞书通知用一个 Composite Action（`feishu-notify`）封装，所有 workflow 共用。它干的事很简单——根据状态拼一张飞书卡片 JSON，curl 发到 Webhook：
+飞书通知根据状态拼一张卡片 JSON，再用 curl 发到 Webhook。PR review 为避免高权限发布 job 动态加载可变代码，直接内联已审计的通知逻辑；其它 workflow 仍可复用 `feishu-notify` Composite Action。所有不可信文本都先经 `env` 传入 shell，再由 `jq --arg` 编码：
 
 ```mermaid
 flowchart LR
