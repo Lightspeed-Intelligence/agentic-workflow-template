@@ -209,7 +209,9 @@ GitHub token；审查评论由单独的发布 job 校验结构化结果后代发
   "conclusion": "APPROVE | REQUEST_CHANGES | COMMENT",
   "critical_count": 0,
   "important_count": 1,
-  "suggestion_count": 2
+  "suggestion_count": 2,
+  "reviewer": "codex | claude",
+  "model": "gpt-5.6-sol | fable-5"
 }
 
 // question

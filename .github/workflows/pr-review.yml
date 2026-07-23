@@ -20,6 +20,9 @@ on:
         required: true
       ANTHROPIC_BASE_URL:
         required: false
+      # 仅为兼容仍显式传参的旧调用方；workflow 内禁止引用或注入此 secret。
+      PAT_TOKEN:
+        required: false
       FEISHU_WEBHOOK_TOKEN:
         required: false
     outputs:
@@ -85,7 +88,8 @@ jobs:
               "description": { "type": "string", "minLength": 1, "maxLength": 500 },
               "conclusion": {
                 "type": "string",
-                "enum": ["APPROVE", "REQUEST_CHANGES", "COMMENT"]
+                "enum": ["APPROVE", "REQUEST_CHANGES", "COMMENT"],
+                "description": "APPROVE 仅当所有问题计数为 0；阻塞或重要计数非 0 时必须 REQUEST_CHANGES"
               },
               "critical_count": { "type": "integer", "minimum": 0 },
               "important_count": { "type": "integer", "minimum": 0 },
@@ -134,6 +138,7 @@ jobs:
           输出要求:
           - 最终回复只输出符合给定 JSON Schema 的对象
           - comment_body 是待后续发布 job 代发的完整审查评论，使用简体中文
+          - APPROVE 仅当三个问题计数均为 0；critical_count 或 important_count 非 0 时必须 REQUEST_CHANGES
           - 代码链接必须使用完整 head commit SHA，不得使用分支名
           PROMPT_EOF
 
@@ -188,7 +193,12 @@ jobs:
             (.comment_body | type == "string" and length > 0 and length <= 60000) and
             (.critical_count | type == "number" and . >= 0 and floor == .) and
             (.important_count | type == "number" and . >= 0 and floor == .) and
-            (.suggestion_count | type == "number" and . >= 0 and floor == .)
+            (.suggestion_count | type == "number" and . >= 0 and floor == .) and
+            (
+              (.conclusion == "APPROVE" and .critical_count == 0 and .important_count == 0 and .suggestion_count == 0) or
+              (.conclusion == "REQUEST_CHANGES" and (.critical_count > 0 or .important_count > 0)) or
+              (.conclusion == "COMMENT" and .critical_count == 0 and .important_count == 0)
+            )
           ' .review-output/review.json > /dev/null
 
       - name: Upload Codex review result
@@ -256,7 +266,8 @@ jobs:
               "description": { "type": "string", "minLength": 1, "maxLength": 500 },
               "conclusion": {
                 "type": "string",
-                "enum": ["APPROVE", "REQUEST_CHANGES", "COMMENT"]
+                "enum": ["APPROVE", "REQUEST_CHANGES", "COMMENT"],
+                "description": "APPROVE 仅当所有问题计数为 0；阻塞或重要计数非 0 时必须 REQUEST_CHANGES"
               },
               "critical_count": { "type": "integer", "minimum": 0 },
               "important_count": { "type": "integer", "minimum": 0 },
@@ -305,6 +316,7 @@ jobs:
           输出要求:
           - 最终回复只输出符合给定 JSON Schema 的对象
           - comment_body 是待后续发布 job 代发的完整审查评论，使用简体中文
+          - APPROVE 仅当三个问题计数均为 0；critical_count 或 important_count 非 0 时必须 REQUEST_CHANGES
           - 代码链接必须使用完整 head commit SHA，不得使用分支名
           PROMPT_EOF
 
@@ -357,7 +369,12 @@ jobs:
             (.comment_body | type == "string" and length > 0 and length <= 60000) and
             (.critical_count | type == "number" and . >= 0 and floor == .) and
             (.important_count | type == "number" and . >= 0 and floor == .) and
-            (.suggestion_count | type == "number" and . >= 0 and floor == .)
+            (.suggestion_count | type == "number" and . >= 0 and floor == .) and
+            (
+              (.conclusion == "APPROVE" and .critical_count == 0 and .important_count == 0 and .suggestion_count == 0) or
+              (.conclusion == "REQUEST_CHANGES" and (.critical_count > 0 or .important_count > 0)) or
+              (.conclusion == "COMMENT" and .critical_count == 0 and .important_count == 0)
+            )
           ' "$GITHUB_WORKSPACE/.review-output/review.json" > /dev/null
 
       - name: Upload Claude review result
@@ -408,6 +425,11 @@ jobs:
             (.critical_count | type == "number" and . >= 0 and floor == .) and
             (.important_count | type == "number" and . >= 0 and floor == .) and
             (.suggestion_count | type == "number" and . >= 0 and floor == .) and
+            (
+              (.conclusion == "APPROVE" and .critical_count == 0 and .important_count == 0 and .suggestion_count == 0) or
+              (.conclusion == "REQUEST_CHANGES" and (.critical_count > 0 or .important_count > 0)) or
+              (.conclusion == "COMMENT" and .critical_count == 0 and .important_count == 0)
+            ) and
             (.comment_body | type == "string" and length > 0 and length <= 60000) and
             (
               (.reviewer == "codex" and .model == "gpt-5.6-sol") or

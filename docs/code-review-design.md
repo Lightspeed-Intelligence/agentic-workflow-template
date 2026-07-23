@@ -265,6 +265,8 @@ Agent 的审查结果是一份结构化 JSON，评论正文也只是其中的待
 
 这个 JSON 通过 CLI 的 JSON Schema 参数约束，并在发布 Job 中再次用 `jq` 校验枚举、计数、正文长度和 reviewer/model 组合。校验通过后才允许评论和通知步骤消费。
 
+Agent artifact 内含 `comment_body`；reusable workflow 的公开 `structured_output` 会删除正文，但保留 `reviewer` 和 `model`，便于调用方判断实际使用的主链路或 fallback。
+
 ```mermaid
 flowchart LR
     AI["Codex / Claude Code 输出 JSON"] --> artifact["短期 artifact<br/>跨权限边界传递"]
