@@ -25,7 +25,7 @@ on:
         required: false
       OPENAI_BASE_URL:
         required: false
-      # 仅为兼容仍显式传参的旧调用方；workflow 内禁止引用或注入此 secret。
+      # 可选；仅供 checkout 读取跨仓库私有 submodule，不注入 Agent 进程。
       PAT_TOKEN:
         required: false
       FEISHU_WEBHOOK_TOKEN:
@@ -54,7 +54,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
           persist-credentials: false
-          token: ${{ github.token }}
+          token: ${{ secrets.PAT_TOKEN || github.token }}
 
       - name: Sanitize trusted checkout path
         run: |
@@ -283,7 +283,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
           persist-credentials: false
-          token: ${{ github.token }}
+          token: ${{ secrets.PAT_TOKEN || github.token }}
 
       - name: Sanitize trusted checkout path
         run: |

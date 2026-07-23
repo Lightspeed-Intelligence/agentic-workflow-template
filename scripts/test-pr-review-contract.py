@@ -298,6 +298,15 @@ def test_model_secret_routing(workflow: str, caller: str) -> None:
     assert 'BASE_URL="${ANTHROPIC_BASE_URL:-https://llm.fantacy.live}"' in workflow
 
 
+def test_checkout_credentials(workflow: str, caller: str) -> None:
+    checkout_token = 'token: ${{ secrets.PAT_TOKEN || github.token }}'
+    assert workflow.count(checkout_token) == 2
+    assert workflow.count('token: ${{ github.token }}') == 2
+    assert workflow.count('secrets.PAT_TOKEN') == 2
+    assert workflow.count('persist-credentials: false') == 4
+    assert caller.count('PAT_TOKEN: ${{ secrets.PAT_TOKEN }}') == 4
+
+
 def test_prepare_script_selection(workflow: str, repo_info: dict[str, str]) -> None:
     pattern = re.compile(
         r'^          prepare_script="\$GITHUB_WORKSPACE/\.trusted-base/'
@@ -360,6 +369,7 @@ def main() -> None:
     test_publisher_gate(workflow)
     test_extra_allowed_tools(workflow)
     test_model_secret_routing(workflow, caller)
+    test_checkout_credentials(workflow, caller)
     print("pr-review contract fixtures passed")
 
 

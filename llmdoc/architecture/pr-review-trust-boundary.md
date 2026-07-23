@@ -32,11 +32,12 @@ pull_request event
 ## Credential Invariants
 
 - `codex_review` and `claude_review`: only `contents: read` and `pull-requests: read`.
-- Reviewer checkouts use `persist-credentials: false`; a preparation step receives the read-only job
-  token to query comments, while Agent processes receive model credentials but no GitHub/PAT token.
+- Reviewer PR-head checkouts may use optional `PAT_TOKEN` to read cross-repository private
+  submodules and use `persist-credentials: false`; trusted-policy checkout and preparation use the
+  read-only job token. Agent processes receive model credentials but no GitHub/PAT token.
 - Codex prefers optional `OPENAI_API_KEY` and `OPENAI_BASE_URL`; each missing value independently
   falls back to its `ANTHROPIC_*` counterpart. Claude receives only the `ANTHROPIC_*` pair.
-- `PAT_TOKEN` remains an unused compatibility declaration in PR review and is not forwarded by the local caller.
+- `PAT_TOKEN` is forwarded by callers only for checkout, with `github.token` as the fallback.
 - `publish`: receives GitHub PR-write authority and optional Feishu webhook, but no model key and no PR-head checkout.
 
 ## Local Privilege
