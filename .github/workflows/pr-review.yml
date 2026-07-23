@@ -97,6 +97,11 @@ jobs:
                 "pattern": "^[^\\r\\n]*$",
                 "description": "不含 CR/LF 的单行审查结论摘要"
               },
+              "review_status": {
+                "type": "string",
+                "enum": ["COMPLETE", "INCOMPLETE"],
+                "description": "完整审查已完成时为 COMPLETE；环境、工具或权限阻止完整审查时为 INCOMPLETE"
+              },
               "conclusion": {
                 "type": "string",
                 "enum": ["APPROVE", "REQUEST_CHANGES", "COMMENT"],
@@ -114,6 +119,7 @@ jobs:
             },
             "required": [
               "description",
+              "review_status",
               "conclusion",
               "critical_count",
               "important_count",
@@ -152,6 +158,7 @@ jobs:
           输出要求:
           - 最终回复只输出符合给定 JSON Schema 的对象
           - description 是不含换行的单行摘要，长度不超过 500 字符
+          - 完成完整审查时 review_status 必须为 COMPLETE；任何环境、工具或权限限制导致审查未完成时必须为 INCOMPLETE，即使进程可以正常返回 JSON
           - comment_body 是待后续发布 job 代发的完整审查评论，使用简体中文并遵循 output-format.md
           - APPROVE 仅当三个问题计数均为 0；critical_count 或 important_count 非 0 时必须 REQUEST_CHANGES
           - 代码链接必须使用完整 head commit SHA，不得使用分支名
@@ -209,6 +216,7 @@ jobs:
             "$LAST_MSG" > review-output/review.json
           jq -e '
             (.description | type == "string" and length > 0 and length <= 500 and (test("[\\r\\n]") | not)) and
+            (.review_status | IN("COMPLETE", "INCOMPLETE")) and
             (.conclusion | IN("APPROVE", "REQUEST_CHANGES", "COMMENT")) and
             (.comment_body | type == "string" and length > 0 and length <= 60000) and
             (.critical_count | type == "number" and . >= 0 and floor == .) and
@@ -220,18 +228,9 @@ jobs:
               (.conclusion == "COMMENT" and .critical_count == 0 and .important_count == 0)
             )
           ' review-output/review.json > /dev/null
-          # CLI 偶尔会以 0 退出并返回结构合法、但明确表示环境导致审查未完成的正文。
-          # 将窄化的环境故障信号视为主链路失败，使独立 Claude job 接手。
-          jq -e '
-            [(.description // ""), (.comment_body // "")] | join("\n") as $text |
-            (
-              ($text | test("(^|\\n)#{0,6}[[:space:]]*审查未完成|未能完成.{0,20}审查|无法(完成|继续).{0,20}审查|执行环境.{0,10}(失败|无法|错误).{0,40}(审查|读取|执行)"; "im")) or
-              (
-                ($text | test("sandbox (setup |init )?(failed|error)"; "im")) and
-                ($text | test("((unable|cannot|can.t|could not|failed) to (complete|continue|finish|perform)[[:space:]]+(the |a )?(code )?review|(code )?review (could not|cannot|can.t|failed to) be completed)"; "im"))
-              )
-            ) | not
-          ' review-output/review.json > /dev/null
+          # CLI 偶尔会以 0 退出并返回结构合法、但明确标记审查未完成的结果。
+          # 结构化状态避免对自由文本做易误报、易漏报的自然语言分类。
+          jq -e '.review_status == "COMPLETE"' review-output/review.json > /dev/null
 
       - name: Upload Codex review result
         uses: actions/upload-artifact@v4
@@ -308,6 +307,11 @@ jobs:
                 "pattern": "^[^\\r\\n]*$",
                 "description": "不含 CR/LF 的单行审查结论摘要"
               },
+              "review_status": {
+                "type": "string",
+                "enum": ["COMPLETE", "INCOMPLETE"],
+                "description": "完整审查已完成时为 COMPLETE；环境、工具或权限阻止完整审查时为 INCOMPLETE"
+              },
               "conclusion": {
                 "type": "string",
                 "enum": ["APPROVE", "REQUEST_CHANGES", "COMMENT"],
@@ -325,6 +329,7 @@ jobs:
             },
             "required": [
               "description",
+              "review_status",
               "conclusion",
               "critical_count",
               "important_count",
@@ -363,6 +368,7 @@ jobs:
           输出要求:
           - 最终回复只输出符合给定 JSON Schema 的对象
           - description 是不含换行的单行摘要，长度不超过 500 字符
+          - 完成完整审查时 review_status 必须为 COMPLETE；任何环境、工具或权限限制导致审查未完成时必须为 INCOMPLETE，即使进程可以正常返回 JSON
           - comment_body 是待后续发布 job 代发的完整审查评论，使用简体中文并遵循 output-format.md
           - APPROVE 仅当三个问题计数均为 0；critical_count 或 important_count 非 0 时必须 REQUEST_CHANGES
           - 代码链接必须使用完整 head commit SHA，不得使用分支名
@@ -439,6 +445,7 @@ jobs:
           ' "$RAW_RESULT" > "$GITHUB_WORKSPACE/review-output/review.json"
           jq -e '
             (.description | type == "string" and length > 0 and length <= 500 and (test("[\\r\\n]") | not)) and
+            (.review_status == "COMPLETE") and
             (.conclusion | IN("APPROVE", "REQUEST_CHANGES", "COMMENT")) and
             (.comment_body | type == "string" and length > 0 and length <= 60000) and
             (.critical_count | type == "number" and . >= 0 and floor == .) and
@@ -496,6 +503,7 @@ jobs:
           jq -e '
             (type == "object") and
             (.description | type == "string" and length > 0 and length <= 500 and (test("[\\r\\n]") | not)) and
+            (.review_status == "COMPLETE") and
             (.conclusion | IN("APPROVE", "REQUEST_CHANGES", "COMMENT")) and
             (.critical_count | type == "number" and . >= 0 and floor == .) and
             (.important_count | type == "number" and . >= 0 and floor == .) and

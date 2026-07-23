@@ -143,7 +143,8 @@ inputs:
 PR 审查优先使用 Codex + GPT-5.6-sol，Codex 链路失败时自动切换到
 Claude Code + Fable-5。两个 Agent 所在 job 只有仓库只读权限，不接收 PAT 或
 GitHub token；审查评论由单独的发布 job 校验结构化结果后代发。Codex 即使退出码为
-0，只要结构化正文明确表示环境导致审查未完成，也会被视为软失败并触发 fallback。
+0，只要结构化 `review_status` 为 `INCOMPLETE`，也会被视为软失败并触发 fallback；
+自由文本中的错误字样不会被误当成运行状态。
 
 `extra_allowed_tools` 只接受 `git -C <安全路径>` 下的 `diff`、`log`、`show`、
 `status`、`rev-parse`、`merge-base` 或 `ls-files` 模式。它用于声明 monorepo/submodule
@@ -213,6 +214,7 @@ GitHub token；审查评论由单独的发布 job 校验结构化结果后代发
 // pr-review
 {
   "description": "审查结论摘要",
+  "review_status": "COMPLETE | INCOMPLETE",
   "conclusion": "APPROVE | REQUEST_CHANGES | COMMENT",
   "critical_count": 0,
   "important_count": 1,

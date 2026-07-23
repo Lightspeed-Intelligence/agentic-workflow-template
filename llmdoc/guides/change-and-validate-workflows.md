@@ -36,7 +36,7 @@ Also:
 - replace GitHub expression placeholders and run `bash -n` on every embedded `run:` body;
 - verify exact pinned CLI versions/help from local cache without downloads;
 - test permission/token, model/fallback, schema/count, artifact and trusted-checkout invariants;
-- exercise soft-failure positive/negative fixtures and `extra_allowed_tools` valid/write/traversal/injection fixtures;
+- exercise `review_status` COMPLETE/INCOMPLETE soft-failure fixtures and `extra_allowed_tools` valid/write/traversal/injection fixtures;
 - verify documentation examples satisfy the same executable truth table.
 
 ## 4. Commit with Temporal Evidence
@@ -58,7 +58,7 @@ Also:
 
 - Treating `permissions:` alone as proof that the Agent cannot access persisted credentials.
 - Trusting historical `github-actions` comments as authenticated incremental state.
-- Allowing schema-valid “review not completed” prose to suppress fallback.
+- Inferring completion from schema-valid prose instead of requiring structured `review_status=COMPLETE`.
 - Passing a broad `Bash(git -C repo:*)` pattern that includes write subcommands.
 - Letting docs or human output formats contradict structured count/conclusion validators.
 

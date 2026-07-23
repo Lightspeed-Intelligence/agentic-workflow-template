@@ -4,6 +4,17 @@ The model's final response remains the workflow-defined JSON object. Its `commen
 must contain the complete GitHub PR comment body in Simplified Chinese; do not emit Markdown
 outside that JSON object.
 
+## Review Completion Status
+
+Set the top-level `review_status` field independently from the finding conclusion:
+
+- `COMPLETE`: the full required review was actually completed.
+- `INCOMPLETE`: an environment, tool, access, or execution limitation prevented the full review,
+  even if the process can still return schema-valid JSON.
+
+Never report `COMPLETE` merely because a JSON response can be produced. An `INCOMPLETE` result is
+a workflow control signal: it is not publishable and causes the isolated fallback reviewer to run.
+
 ## Conclusion Values
 
 Use exactly one, preserving the workflow's count/conclusion contract:

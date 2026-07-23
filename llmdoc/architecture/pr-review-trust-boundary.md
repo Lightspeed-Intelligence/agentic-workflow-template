@@ -45,10 +45,10 @@ has full local access and the input cannot grant GitHub credentials.
 ## Review and Artifact Invariants
 
 - Always review the complete event-pinned `base.sha...head.sha` diff; never use comments as cutoff state.
-- Codex success requires process success, schema/count validation and no explicit environment soft-failure signal.
+- Codex success requires process success, schema/count validation and structured `review_status=COMPLETE`; `INCOMPLETE` is an exit-zero soft-failure signal.
 - Claude runs only when the whole Codex job is non-success and uses a fresh runner.
 - The artifact includes `comment_body`; public `structured_output` removes it but retains reviewer/model identity.
-- Publisher revalidates type, length, count/conclusion semantics and the reviewer/model pair before commenting.
+- Publisher revalidates `review_status=COMPLETE`, type, length, count/conclusion semantics and the reviewer/model pair before commenting.
 
 ## Residual Risks
 

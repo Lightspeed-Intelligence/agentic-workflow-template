@@ -266,6 +266,7 @@ Agent 的审查结果是一份结构化 JSON，评论正文也只是其中的待
 
 ```json
 {
+  "review_status": "COMPLETE",
   "conclusion": "COMMENT",
   "description": "代码良好，发现 2 个小问题",
   "critical_count": 0,
@@ -277,7 +278,7 @@ Agent 的审查结果是一份结构化 JSON，评论正文也只是其中的待
 }
 ```
 
-这个 JSON 通过 CLI 的 JSON Schema 参数约束，并在发布 Job 中再次用 `jq` 校验枚举、计数、正文长度和 reviewer/model 组合。校验通过后才允许评论和通知步骤消费。
+这个 JSON 通过 CLI 的 JSON Schema 参数约束，并在发布 Job 中再次用 `jq` 校验完成状态、枚举、计数、正文长度和 reviewer/model 组合。只有 `review_status=COMPLETE` 的结果才允许评论和通知步骤消费；`INCOMPLETE` 即使伴随退出码 0 也会触发 fallback 或使最终审查失败。
 
 Agent artifact 内含 `comment_body`；reusable workflow 的公开 `structured_output` 会删除正文，但保留 `reviewer` 和 `model`，便于调用方判断实际使用的主链路或 fallback。
 
@@ -429,5 +430,5 @@ flowchart TD
 - **结构化输出** — JSON Schema 让 AI 的结果可编程，驱动通知和统计
 - **权限分层** — Agent 对临时 runner 高权限、对 GitHub 只读；副作用集中到确定性发布 Job
 - **主备隔离** — Codex 优先，失败时 Claude Code 在新 runner 上接手，避免环境污染
-- **软失败可见** — Codex 即使以 0 退出，只要正文明确表示环境导致审查未完成，也会触发 fallback
+- **软失败可见** — Codex 即使以 0 退出，只要结构化 `review_status` 为 `INCOMPLETE`，也会触发 fallback，不依赖自由文本正则猜测
 - **高信号策略** — 宁可漏报也不误报，维护团队对自动审查的信任

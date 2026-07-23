@@ -18,6 +18,7 @@
 
 ```text
 description        non-empty single line, <= 500 characters
+review_status      COMPLETE | INCOMPLETE
 conclusion         APPROVE | REQUEST_CHANGES | COMMENT
 critical_count     non-negative integer
 important_count    non-negative integer
@@ -28,16 +29,17 @@ reviewer/model     codex/gpt-5.6-sol | claude/fable-5
 
 `APPROVE` requires all counts zero. `REQUEST_CHANGES` requires critical or important nonzero.
 `COMMENT` requires critical and important zero; suggestions may be zero for an open question.
+Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even when the Agent process exits zero.
 
 ## Artifacts and Output
 
 - Reviewer artifacts: `review-result-codex` or `review-result-claude`, path `review-output/review.json`, overwrite enabled, one-day retention.
-- Public reusable output deletes `comment_body` and preserves description, conclusion, counts, reviewer and model.
+- Public reusable output deletes `comment_body` and preserves review status, description, conclusion, counts, reviewer and model.
 - Publication uses a body file; model/PR text is not interpolated into shell commands.
 
 ## Failure Semantics
 
-- Any Codex job non-success, including explicit environment soft-failure prose, triggers Claude.
+- Any Codex job non-success, including structured `review_status=INCOMPLETE`, triggers Claude.
 - Findings are successful review results; `REQUEST_CHANGES` does not trigger fallback.
 - If neither reviewer succeeds, notification may run but the publisher job ultimately fails.
 - Feishu is best effort and cannot turn a failed review into success or a successful review into failure.
