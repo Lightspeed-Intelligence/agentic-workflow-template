@@ -136,6 +136,13 @@ def test_provider_and_permission_boundaries() -> None:
         assert "contents: write" in publisher
         assert "pull-requests: write" in publisher
 
+    action = ACTION.read_text()
+    install_block = action.split("    - name: Install pinned agent CLI without model credentials", 1)[1]
+    install_block = install_block.split("    - name: Run pinned agent CLI", 1)[0]
+    assert "inputs.api_key" not in install_block
+    assert "API_KEY" not in install_block
+    assert "--ignore-scripts --no-audit --no-fund" in install_block
+
 
 def test_fallback_and_artifact_flow() -> None:
     pure = {
@@ -259,6 +266,7 @@ def test_change_artifact_scripts() -> None:
 
 
 def test_runtime_is_immutable() -> None:
+    all_refs: set[str] = set()
     for path in WORKFLOWS.values():
         text = path.read_text()
         blocks = re.findall(
@@ -268,6 +276,26 @@ def test_runtime_is_immutable() -> None:
         )
         assert blocks, path
         assert all(re.fullmatch(r"[0-9a-f]{40}", ref) for ref in blocks), (path, blocks)
+        all_refs.update(blocks)
+    assert len(all_refs) == 1, all_refs
+
+    runtime_ref = next(iter(all_refs))
+    runtime_paths = [
+        ".github/actions/run-agent/action.yml",
+        ".github/actions/feishu-notify/action.yml",
+        *[str(path.relative_to(ROOT)) for path in sorted(SCRIPTS.glob("*.sh"))],
+        *[
+            str(path.relative_to(ROOT))
+            for path in sorted((ROOT / ".claude/skills").glob("*/SKILL.md"))
+            if path.parent.name in {
+                "answer-question", "bug-analyze", "feature-review", "github-comment",
+                "implement", "update-llmdoc",
+            }
+        ],
+    ]
+    for relative in runtime_paths:
+        pinned = run(["git", "show", f"{runtime_ref}:{relative}"], cwd=ROOT).stdout
+        assert pinned == (ROOT / relative).read_text(), f"runtime pin is stale for {relative}"
 
 
 def main() -> None:

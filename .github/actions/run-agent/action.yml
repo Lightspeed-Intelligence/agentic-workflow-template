@@ -31,6 +31,34 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Install pinned agent CLI without model credentials
+      shell: bash
+      env:
+        PROVIDER: ${{ inputs.provider }}
+      run: |
+        set -euo pipefail
+        case "$PROVIDER" in
+          codex)
+            install_dir="$RUNNER_TEMP/codex-0.145.0"
+            npm install --ignore-scripts --no-audit --no-fund \
+              --prefix "$install_dir" @openai/codex@0.145.0
+            codex_path="$install_dir/node_modules/.bin/codex"
+            "$codex_path" --version
+            ;;
+          claude)
+            install_dir="$RUNNER_TEMP/claude-code-2.1.148"
+            npm install --ignore-scripts --no-audit --no-fund \
+              --prefix "$install_dir" @anthropic-ai/claude-code@2.1.148
+            wrapper="$install_dir/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs"
+            test -f "$wrapper"
+            node "$wrapper" --version
+            ;;
+          *)
+            echo "::error::Unsupported provider: $PROVIDER"
+            exit 1
+            ;;
+        esac
+
     - name: Run pinned agent CLI
       shell: bash
       env:
@@ -52,12 +80,8 @@ runs:
 
         case "$PROVIDER" in
           codex)
-            install_dir="$RUNNER_TEMP/codex-0.145.0"
-            npm install --ignore-scripts --no-audit --no-fund \
-              --prefix "$install_dir" @openai/codex@0.145.0
-            codex_path="$install_dir/node_modules/.bin/codex"
-            "$codex_path" --version
-
+            codex_path="$RUNNER_TEMP/codex-0.145.0/node_modules/.bin/codex"
+            test -x "$codex_path"
             export OPENAI_API_KEY="$API_KEY"
             export CODEX_HOME="$RUNNER_TEMP/codex-home"
             mkdir -p "$CODEX_HOME"
@@ -88,12 +112,8 @@ runs:
               - < "$PROMPT_FILE"
             ;;
           claude)
-            install_dir="$RUNNER_TEMP/claude-code-2.1.148"
-            npm install --ignore-scripts --no-audit --no-fund \
-              --prefix "$install_dir" @anthropic-ai/claude-code@2.1.148
-            wrapper="$install_dir/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs"
+            wrapper="$RUNNER_TEMP/claude-code-2.1.148/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs"
             test -f "$wrapper"
-            node "$wrapper" --version
 
             export ANTHROPIC_API_KEY="$API_KEY"
             export ANTHROPIC_AUTH_TOKEN="$API_KEY"
