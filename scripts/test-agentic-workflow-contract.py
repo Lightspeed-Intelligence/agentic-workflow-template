@@ -95,6 +95,8 @@ def test_final_job_names() -> None:
 def test_provider_and_permission_boundaries() -> None:
     caller = CALLER.read_text()
     assert "id-token: write" not in caller
+    contract_job = job_block(caller, "pr-review-contract")
+    assert "fetch-depth: 0" in contract_job
     assert caller.count("OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}") == 4
     assert caller.count("OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}") == 4
 
@@ -179,6 +181,21 @@ def test_issue_dispatch_is_analysis_only() -> None:
     assert "不得编辑文件、提交、push" in skill
     assert "简单 Bug 可直接创建 PR 修复" not in skill
     assert "自动修复分支" not in skill
+
+
+def test_issue_comment_markers_are_authenticated() -> None:
+    sources = [
+        WORKFLOWS["question"].read_text(),
+        WORKFLOWS["issue-dispatch"].read_text(),
+        (SCRIPTS / "publish-change.sh").read_text(),
+    ]
+    for source in sources:
+        assert '.user.login == \\"github-actions[bot]\\"' in source
+        assert '.performed_via_github_app.slug == \\"github-actions\\"' in source
+    implement = WORKFLOWS["implement"].read_text()
+    publisher = (SCRIPTS / "publish-change.sh").read_text()
+    assert "COMMENT_TOKEN: ${{ github.token }}" in implement
+    assert 'GH_TOKEN="$COMMENT_TOKEN" gh issue comment' in publisher
 
 
 def test_untrusted_text_is_not_shell_source() -> None:
@@ -304,6 +321,7 @@ def main() -> None:
     test_provider_and_permission_boundaries()
     test_fallback_and_artifact_flow()
     test_issue_dispatch_is_analysis_only()
+    test_issue_comment_markers_are_authenticated()
     test_untrusted_text_is_not_shell_source()
     test_change_artifact_scripts()
     test_runtime_is_immutable()

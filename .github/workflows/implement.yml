@@ -446,6 +446,7 @@ jobs:
         if: (needs.codex_candidate.result == 'success' && needs.validate_codex.result == 'success') || (needs.claude_candidate.result == 'success' && needs.validate_claude.result == 'success')
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN || github.token }}
+          COMMENT_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           BASE_REF: ${{ needs.prepare.outputs.base_ref }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}

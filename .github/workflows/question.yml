@@ -332,7 +332,11 @@ jobs:
 
           existing_id=$(gh api --paginate \
             "repos/$REPOSITORY/issues/$ISSUE_NUMBER/comments?per_page=100" \
-            --jq ".[] | select(.body | contains(\"$marker\")) | .id" | tail -n 1)
+            --jq ".[] | select(
+              .user.login == \"github-actions[bot]\" and
+              .performed_via_github_app.slug == \"github-actions\" and
+              (.body | contains(\"$marker\"))
+            ) | .id" | tail -n 1)
           if [[ -n "$existing_id" ]]; then
             jq -n --rawfile body "$RUNNER_TEMP/comment.md" '{body: $body}' > "$RUNNER_TEMP/payload.json"
             gh api --method PATCH "repos/$REPOSITORY/issues/comments/$existing_id" \

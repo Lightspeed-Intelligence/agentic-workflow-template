@@ -54,6 +54,7 @@ if [[ "$mode" == implement ]]; then
   : "${ISSUE_NUMBER:?ISSUE_NUMBER is required for implement}"
   : "${ISSUE_ID:?ISSUE_ID is required for implement}"
   : "${TRIGGER_COMMENT_ID:?TRIGGER_COMMENT_ID is required for implement}"
+  : "${COMMENT_TOKEN:?COMMENT_TOKEN is required for implement comments}"
   pr_marker="<!-- agentic-implement:${ISSUE_ID} -->"
 else
   pr_marker="<!-- agentic-update-llmdoc:${base_ref} -->"
@@ -137,15 +138,20 @@ if [[ "$mode" == implement ]]; then
     echo "$issue_marker"
   } >> "$RUNNER_TEMP/issue-comment.md"
 
-  existing_comment_id=$(gh api --paginate \
+  existing_comment_id=$(GH_TOKEN="$COMMENT_TOKEN" gh api --paginate \
     "repos/$repository/issues/$ISSUE_NUMBER/comments?per_page=100" \
-    --jq ".[] | select(.body | contains(\"$issue_marker\")) | .id" | tail -n 1)
+    --jq ".[] | select(
+      .user.login == \"github-actions[bot]\" and
+      .performed_via_github_app.slug == \"github-actions\" and
+      (.body | contains(\"$issue_marker\"))
+    ) | .id" | tail -n 1)
   if [[ -n "$existing_comment_id" ]]; then
     jq -n --rawfile body "$RUNNER_TEMP/issue-comment.md" '{body: $body}' > "$RUNNER_TEMP/comment-payload.json"
-    gh api --method PATCH "repos/$repository/issues/comments/$existing_comment_id" \
+    GH_TOKEN="$COMMENT_TOKEN" gh api --method PATCH "repos/$repository/issues/comments/$existing_comment_id" \
       --input "$RUNNER_TEMP/comment-payload.json" > /dev/null
   else
-    gh issue comment "$ISSUE_NUMBER" --repo "$repository" --body-file "$RUNNER_TEMP/issue-comment.md"
+    GH_TOKEN="$COMMENT_TOKEN" gh issue comment "$ISSUE_NUMBER" --repo "$repository" \
+      --body-file "$RUNNER_TEMP/issue-comment.md"
   fi
 fi
 
