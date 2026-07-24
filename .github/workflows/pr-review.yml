@@ -169,10 +169,8 @@ jobs:
           请审查 PR #${{ github.event.pull_request.number }}。
 
           审查材料已在本地准备好:
-          - 可信审查规范（来自 template 固定 revision，三份都必须阅读）:
-            1. $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/pr-review/SKILL.md
-            2. $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/pr-review/references/review-sop.md
-            3. $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/pr-review/references/output-format.md
+          - 可信审查规范（来自 template 固定 revision）:
+            $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/pr-review/SKILL.md
           - 可信评论规范: $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/github-comment/SKILL.md
           - PR 元数据: $RUNNER_TEMP/pr.json
           - 审查模式与可信历史结论: $RUNNER_TEMP/review-history.json
@@ -194,7 +192,7 @@ jobs:
           - description 是不含换行的单行摘要，长度不超过 500 字符
           - 能访问核心 diff、工作树和必要上下文，并完成有意义的代码审查时，review_status 必须为 COMPLETE
           - 仅当核心审查材料不可访问或无法进行有意义的审查时才设为 INCOMPLETE；单个项目测试因 runner 缺少工具/版本而无法执行时，记录限制但不得仅因此判定 INCOMPLETE
-          - comment_body 是待后续发布 job 代发的完整审查评论，使用简体中文并遵循 .trusted-policy 中的 output-format.md
+          - comment_body 是待后续发布 job 代发的完整审查评论，使用简体中文并遵循 SKILL.md 中的输出模板
           - APPROVE 仅当三个问题计数均为 0；critical_count 或 important_count 非 0 时必须 REQUEST_CHANGES
           - 代码链接必须使用完整 head commit SHA，不得使用分支名
           PROMPT_EOF
@@ -409,10 +407,8 @@ jobs:
           Codex 主链路失败。请作为 fallback 审查 PR #${{ github.event.pull_request.number }}。
 
           审查材料已在本地准备好:
-          - 可信审查规范（来自 template 固定 revision，三份都必须阅读）:
-            1. $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/pr-review/SKILL.md
-            2. $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/pr-review/references/review-sop.md
-            3. $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/pr-review/references/output-format.md
+          - 可信审查规范（来自 template 固定 revision）:
+            $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/pr-review/SKILL.md
           - 可信评论规范: $GITHUB_WORKSPACE/.trusted-policy/.claude/skills/github-comment/SKILL.md
           - PR 元数据: $RUNNER_TEMP/pr.json
           - 审查模式与可信历史结论: $RUNNER_TEMP/review-history.json
@@ -434,7 +430,7 @@ jobs:
           - description 是不含换行的单行摘要，长度不超过 500 字符
           - 能访问核心 diff、工作树和必要上下文，并完成有意义的代码审查时，review_status 必须为 COMPLETE
           - 仅当核心审查材料不可访问或无法进行有意义的审查时才设为 INCOMPLETE；单个项目测试因 runner 缺少工具/版本而无法执行时，记录限制但不得仅因此判定 INCOMPLETE
-          - comment_body 是待后续发布 job 代发的完整审查评论，使用简体中文并遵循 .trusted-policy 中的 output-format.md
+          - comment_body 是待后续发布 job 代发的完整审查评论，使用简体中文并遵循 SKILL.md 中的输出模板
           - APPROVE 仅当三个问题计数均为 0；critical_count 或 important_count 非 0 时必须 REQUEST_CHANGES
           - 代码链接必须使用完整 head commit SHA，不得使用分支名
           PROMPT_EOF
