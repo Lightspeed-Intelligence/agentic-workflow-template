@@ -663,7 +663,16 @@ jobs:
             [ "$REVIEWER" = "claude" ] && DESCRIPTION="${DESCRIPTION}（Claude Code fallback）"
             case "$CONCLUSION" in
               "APPROVE") STATUS="success" ;;
-              "REQUEST_CHANGES") STATUS="error" ;;
+              # REQUEST_CHANGES 按严重度分级配色：有 BLOCKER(critical>0)才用红色 error；
+              # 仅 MAJOR(critical=0)是「强烈建议修复」而非「必须修复」，降为黄色 warning，
+              # 避免把非阻塞的重要建议渲染成与真正阻塞同等的红色告警。
+              "REQUEST_CHANGES")
+                if [ "${CRITICAL:-0}" -gt 0 ] 2>/dev/null; then
+                  STATUS="error"
+                else
+                  STATUS="warning"
+                fi
+                ;;
               *) STATUS="info" ;;
             esac
           else
