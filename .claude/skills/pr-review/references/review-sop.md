@@ -121,7 +121,7 @@ Keep this pragmatic: project documentation under `llmdoc/` or intentionally comm
 
 Report only high-confidence issues. Avoid:
 
-- pre-existing unrelated problems;
+- pre-existing problems the PR never touches: report a pre-existing (既存) issue only when the PR touches, depends on, or worsens the affected code. When you do, use `git blame` to label its 来源 as 既存(非本轮引入) per `references/output-format.md`; it still counts and blocks by its real severity. Do not drag in unrelated ancestral bugs the PR never goes near.
 - speculative issues requiring unusual external conditions unless the PR introduces the risk;
 - subjective style preferences;
 - issues that normal linters already catch unless they break the workflow before lint runs;
