@@ -46,7 +46,7 @@ sequenceDiagram
 graph TB
     subgraph biz["业务仓库 (tipsy-backend 等)"]
         ci["ci.yml<br/>唯一需要的配置文件"]
-        skills[".claude/skills/*<br/>AI 的工作手册"]
+        context["llmdoc / 源码<br/>项目上下文"]
     end
 
     subgraph tpl["模板仓库 (agentic-workflow-template)"]
@@ -57,8 +57,10 @@ graph TB
             q["question.yml"]
         end
         subgraph actions["Composite Actions"]
+            runner["run-agent/<br/>固定版本主备 runner"]
             feishu["feishu-notify/"]
         end
+        skills[".claude/skills/*<br/>模板任务规范"]
     end
 
     ci -->|"uses: ...@main<br/>远程调用"| wf
@@ -71,7 +73,7 @@ graph TB
 
 业务仓库只需要做两件事：
 1. 放一个 `ci.yml` 当路由入口
-2. 放一套 `.claude/skills/` 告诉 AI 该怎么干活
+2. 维护自己的源码与 llmdoc；模板任务规范随 reusable workflow 的固定 revision 提供
 
 ---
 

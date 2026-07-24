@@ -28,6 +28,8 @@
 - `llmdoc/memory/reflections/bounded-independent-review.md`: lesson from an unbounded review/evidence loop.
 - `llmdoc/memory/reflections/reusable-pr-review-integration-regressions.md`: lessons from trust bootstrap,
   private submodules, legacy consumers, provider routing and reusable-workflow reruns.
+- `llmdoc/memory/reflections/codex-first-agentic-workflows.md`: lessons from splitting pure-answer and
+  code-writing flows, immutable runtime release, submodule/result contracts and bounded evidence repair.
 - `llmdoc/memory/doc-gaps.md`: unresolved documentation and automation gaps.
 
 ## Routing Rules

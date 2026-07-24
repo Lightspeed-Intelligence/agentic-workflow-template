@@ -283,9 +283,12 @@ def test_extra_allowed_tools(workflow: str) -> None:
 
 
 def test_model_secret_routing(workflow: str, caller: str) -> None:
+    pr_caller_match = re.search(r'^  pr-review:\n(.*)\Z', caller, re.MULTILINE | re.DOTALL)
+    assert pr_caller_match, "pr-review caller job not found"
+    pr_caller = pr_caller_match.group(0)
     for name in ("OPENAI_API_KEY", "OPENAI_BASE_URL"):
         assert re.search(rf'^      {name}:\n        required: false$', workflow, re.MULTILINE)
-        assert caller.count(f'{name}: ${{{{ secrets.{name} }}}}') == 1
+        assert pr_caller.count(f'{name}: ${{{{ secrets.{name} }}}}') == 1
 
     assert workflow.count(
         'OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || secrets.ANTHROPIC_API_KEY }}'
