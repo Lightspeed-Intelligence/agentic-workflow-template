@@ -29,6 +29,34 @@ copying Agent logic.
    terminal names are part of the downstream ruleset contract.
 7. Optional Feishu notification reports the result but is never the source of workflow truth.
 
+## Result Flows
+
+### Pure answers
+
+`question` and `issue-dispatch` normalize the primary result against their complete task-specific
+schema before upload. A missing field, wrong type, extra field or structured `INCOMPLETE` result
+makes the primary job fail and starts Claude from the original fixed input. The publisher accepts
+only `COMPLETE` JSON, authenticates an existing marker comment by Bot and App identity, and removes
+the comment body from caller-visible output.
+
+### Code-writing tasks
+
+`implement` and `update-llmdoc` package a `READY` worktree as exactly one child commit of the frozen
+base and transfer it in a Git bundle. A separate read-only job verifies checksum, ancestry, changed
+paths, gitlink policy and an optional base-pinned consumer validator. The publisher receives only the
+validated artifact, operates in a bare repository, and does not execute consumer code.
+
+`NO_CHANGES` is accepted only when the root and recursive submodule worktrees are clean. `BLOCKED`
+may describe a deliberate inability to publish, including any submodule change; neither outcome
+contains a candidate bundle or triggers fallback.
+
+## Immutable Runtime Release
+
+The four workflows use one full template commit SHA for their shared runner, scripts, Skills,
+publisher and notification action. Runtime changes use two commits: first commit the runtime bytes,
+then advance every workflow pin to that commit. `scripts/test-agentic-workflow-contract.py` compares
+each pinned runtime file with the authoring tree so a stale or split pin cannot pass CI.
+
 ## Invariants
 
 - Called-workflow permissions cannot exceed caller permissions; every sensitive job still declares its own minimum.
@@ -37,6 +65,12 @@ copying Agent logic.
 - `issue-dispatch` is analysis-only. `auto_fix_eligible` may recommend a later `implement` run but never
   authorizes an automatic fix in the dispatch workflow.
 - `NO_CHANGES` and genuine `BLOCKED` results are valid domain outcomes; they do not trigger fallback.
+- Complete task-specific schema and worktree checks happen before a primary Agent job is considered
+  successful; publisher-only rejection must not suppress fallback.
+- Gitlink add/change/delete and dirty recursive submodule worktrees are never silently truncated into
+  a publishable root-repository bundle.
+- Publisher-owned comments are matched only when both `github-actions[bot]` and the `github-actions`
+  App identity agree with the stable marker.
 - Workflow YAML, action YAML and tracked Skills are executable contracts; README/design/llmdoc must follow them.
 - Submodules are optional consumer topology even though checkouts and helper scripts support them.
 - A GitHub Actions rerun retains the reusable-workflow revision resolved by the original run. A

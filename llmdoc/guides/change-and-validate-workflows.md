@@ -16,6 +16,9 @@
 - Update workflow behavior, Skill/SOP/output format, schema/validators and public docs together.
 - Move untrusted PR/Agent text through environment variables and encode with `jq --arg`; never interpolate it into shell source.
 - Pin CLIs, install them without lifecycle scripts or model secrets, and verify the exact executable used.
+- Release shared Agent runtime in two commits: commit the runtime/Skill/script bytes first, then pin
+  every reusable workflow to that immutable commit. Never pin a workflow to bytes that exist only in
+  the same uncommitted or not-yet-addressable tree.
 - Pin template-owned reviewer policy to an immutable template revision. Use the consumer base SHA only
   for consumer-owned trusted inputs such as history preparation; never require a consumer to copy the
   template's split policy files.
@@ -27,6 +30,8 @@
   back to `ANTHROPIC_*`, while Claude continues to receive only `ANTHROPIC_*`.
 - Keep artifact paths non-hidden and upload/download names stable across rerun-failed-jobs behavior.
 - Do not dynamically fetch mutable code in a high-permission publisher.
+- Preserve terminal job names that downstream rulesets may require. Internal prepare/Agent/validator
+  jobs may change, but `answer`, `dispatch`, `implement`, `update` and `review` are compatibility APIs.
 
 ## 3. Validate Locally
 
@@ -37,6 +42,7 @@ git diff --check
 bash -n scripts/init.sh scripts/status.sh scripts/update-all.sh
 actionlint .github/workflows/*.yml
 python3 scripts/test-pr-review-contract.py
+python3 scripts/test-agentic-workflow-contract.py
 ```
 
 If the repository-wide command exposes a pre-existing baseline warning, prove that the changed
@@ -49,6 +55,12 @@ Also:
 - replace GitHub expression placeholders and run `bash -n` on every embedded `run:` body;
 - verify exact pinned CLI versions/help from local cache without downloads;
 - test permission/token, model/fallback, schema/count, artifact and trusted-checkout invariants;
+- reject malformed complete results before the fallback decision, including missing, mistyped and
+  extra task-specific fields;
+- exercise clean and dirty `NO_CHANGES` for tracked, untracked and recursive-submodule state;
+- exercise gitlink add/change/delete, dirty submodule worktrees and update-llmdoc recursive checkout;
+- assert that every shared-runtime pin resolves locally and its tracked bytes equal the authoring tree;
+- assert stable terminal job names independently of display names;
 - assert policy provenance and credential scope: PR-head checkout alone may use the PAT fallback,
   while consumer-base and template-policy checkouts use the read-only job token;
 - exercise `review_status` COMPLETE/INCOMPLETE soft-failure fixtures and `extra_allowed_tools` valid/write/traversal/injection fixtures;
@@ -89,6 +101,8 @@ repeatedly clicking **Re-run jobs** cannot validate the newly merged workflow.
 - Run one final full-range review only if the tree changed after the first range review.
 - Run one terminal evidence audit. Permit at most one targeted evidence repair; never rerun blind code review on an unchanged tree merely to improve paperwork.
 - Classify failures as implementation, review integrity or evidence completeness. At the retry cap, stop and report choices rather than expanding scope.
+- Require every blind report itself—not only its manifest—to record run ID, canonical reviewer task,
+  fixed snapshot/head/tree/range, `fork_turns`, `inherited_turns`, and allowed/forbidden inputs.
 
 ## 6. Clean Up After Merge
 
@@ -112,6 +126,10 @@ repeatedly clicking **Re-run jobs** cannot validate the newly merged workflow.
 - Marking a meaningful review `INCOMPLETE` solely because one project-specific test runtime is absent.
 - Passing a broad `Bash(git -C repo:*)` pattern that includes write subcommands.
 - Letting docs or human output formats contradict structured count/conclusion validators.
+- Treating a schema-valid common subset as sufficient when the selected workflow has additional
+  required fields, causing a publisher failure instead of primary fallback.
+- Accepting `NO_CHANGES` before proving that root, untracked and recursive-submodule state is clean.
+- Advancing only some immutable runtime refs or pinning them before the runtime commit exists.
 
 ## Related Docs
 
