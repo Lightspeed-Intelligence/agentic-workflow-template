@@ -35,6 +35,22 @@ normalized="$artifact_dir/result.json"
 jq -c --arg reviewer "$reviewer" --arg model "$model" \
   '. + {reviewer: $reviewer, model: $model}' "$result_file" > "$normalized"
 
+block_submodule_change() {
+  jq -c '
+    .outcome = "BLOCKED"
+    | .description = "任务涉及 submodule 变更，自动发布暂不支持跨仓库修改"
+    | .comment_body += "\n\n自动实现已停止：当前发布链路暂不支持 submodule 工作树、提交或 gitlink 变更。"
+  ' "$normalized" > "$artifact_dir/result.tmp"
+  mv "$artifact_dir/result.tmp" "$normalized"
+  jq -n \
+    --arg base_sha "$base_sha" \
+    --arg reviewer "$reviewer" \
+    --arg model "$model" \
+    '{version: 1, outcome: "BLOCKED", base_sha: $base_sha, reviewer: $reviewer, model: $model}' \
+    > "$artifact_dir/manifest.json"
+  exit 0
+}
+
 if [[ "$outcome" != READY ]]; then
   jq -n \
     --arg outcome "$outcome" \
@@ -51,23 +67,21 @@ if [[ -z "$(git -C "$repo_dir" status --porcelain --untracked-files=all)" ]]; th
   exit 1
 fi
 
+dirty_submodules=$(git -C "$repo_dir" submodule foreach --quiet --recursive '
+  if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+    printf "%s\n" "$displaypath"
+  fi
+')
+if [[ -n "$dirty_submodules" ]]; then
+  echo "::notice::Blocking dirty submodule worktrees: $dirty_submodules"
+  block_submodule_change
+fi
+
 git -C "$repo_dir" diff --check
 git -C "$repo_dir" add -A
 
 if git -C "$repo_dir" diff --cached --raw | awk 'substr($1, 2) == "160000" || $2 == "160000" { found=1 } END { exit !found }'; then
-  jq -c '
-    .outcome = "BLOCKED"
-    | .description = "任务涉及 submodule 提交，自动发布暂不支持跨仓库变更"
-    | .comment_body += "\n\n自动实现已停止：当前发布链路暂不支持创建或更新 submodule 仓库中的提交和 PR。"
-  ' "$normalized" > "$artifact_dir/result.tmp"
-  mv "$artifact_dir/result.tmp" "$normalized"
-  jq -n \
-    --arg base_sha "$base_sha" \
-    --arg reviewer "$reviewer" \
-    --arg model "$model" \
-    '{version: 1, outcome: "BLOCKED", base_sha: $base_sha, reviewer: $reviewer, model: $model}' \
-    > "$artifact_dir/manifest.json"
-  exit 0
+  block_submodule_change
 fi
 
 if [[ "$mode" == update-llmdoc ]]; then

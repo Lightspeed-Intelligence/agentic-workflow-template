@@ -311,6 +311,21 @@ def test_change_artifact_scripts() -> None:
         git(gitlink_repo / "module", "config", "user.name", "Contract Test")
         git(gitlink_repo / "module", "config", "user.email", "contract@example.invalid")
         git(gitlink_repo / "module", "config", "commit.gpgsign", "false")
+
+        (gitlink_repo / "module/file.txt").write_text("base\ndirty\n")
+        (gitlink_repo / "file.txt").write_text("base\ntop-level\n")
+        dirty_raw = root / "gitlink-dirty.json"
+        dirty_raw.write_text(json.dumps(change_result()))
+        dirty_artifact = root / "gitlink-dirty-artifact"
+        run([
+            str(package), str(dirty_raw), str(gitlink_repo), str(dirty_artifact), gitlink_base,
+            "codex", "gpt-5.6-sol", "implement",
+        ])
+        assert json.loads((dirty_artifact / "manifest.json").read_text())["outcome"] == "BLOCKED"
+        assert not (dirty_artifact / "candidate.bundle").exists()
+
+        git(gitlink_repo, "reset", "-q", "--hard", gitlink_base)
+        git(gitlink_repo / "module", "reset", "-q", "--hard")
         (gitlink_repo / "module/file.txt").write_text("base\nchanged\n")
         git(gitlink_repo / "module", "commit", "-qam", "change submodule")
         modify_raw = root / "gitlink-modify.json"
