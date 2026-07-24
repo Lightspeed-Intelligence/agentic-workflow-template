@@ -10,7 +10,7 @@ Allow deep local code analysis while preventing model-driven processes from writ
 pull_request event
   -> deterministic preparation: authenticate structured Bot history, select full/incremental range
   -> codex_review: read-only token, full local execution, gpt-5.6-sol
-  -> on process/schema/soft failure: independent claude_review, read-only token, fable-5
+  -> on process/schema/soft failure: independent claude_review, read-only token, claude-opus-4-8
   -> one-day structured artifact
   -> publish: deterministic validation, pull-requests: write, gh pr comment
   -> optional Feishu notification

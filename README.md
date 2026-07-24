@@ -278,7 +278,7 @@ Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有
   "important_count": 1,
   "suggestion_count": 2,
   "reviewer": "codex | claude",
-  "model": "gpt-5.6-sol | fable-5"
+  "model": "gpt-5.6-sol | claude-opus-4-8"
 }
 
 // question
@@ -286,7 +286,7 @@ Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有
   "description": "回答内容摘要",
   "result_status": "COMPLETE",
   "reviewer": "codex | claude",
-  "model": "gpt-5.6-sol | fable-5"
+  "model": "gpt-5.6-sol | claude-opus-4-8"
 }
 ```
 
