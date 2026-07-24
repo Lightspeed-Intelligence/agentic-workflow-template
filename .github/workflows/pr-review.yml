@@ -540,7 +540,7 @@ jobs:
 
   # 唯一拥有 PR 写权限的 job。它不运行 Agent，也不接收模型 API key。
   publish:
-    name: Validate and publish review
+    name: review
     needs: [codex_review, claude_review]
     if: always() && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
