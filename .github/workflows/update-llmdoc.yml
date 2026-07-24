@@ -109,7 +109,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 9c013ca95bf45ecf9895be88ff8a10d0100134b1
+          ref: 52ec7ce63524bc440e634baa6c64a251f4466958
           path: runtime
           sparse-checkout: |
             .github/actions/run-agent
@@ -208,7 +208,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 9c013ca95bf45ecf9895be88ff8a10d0100134b1
+          ref: 52ec7ce63524bc440e634baa6c64a251f4466958
           path: runtime
           sparse-checkout: .github/scripts/agentic
           sparse-checkout-cone-mode: false
@@ -257,7 +257,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 9c013ca95bf45ecf9895be88ff8a10d0100134b1
+          ref: 52ec7ce63524bc440e634baa6c64a251f4466958
           path: runtime
           sparse-checkout: |
             .github/actions/run-agent
@@ -355,7 +355,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 9c013ca95bf45ecf9895be88ff8a10d0100134b1
+          ref: 52ec7ce63524bc440e634baa6c64a251f4466958
           path: runtime
           sparse-checkout: .github/scripts/agentic
           sparse-checkout-cone-mode: false
@@ -414,7 +414,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 9c013ca95bf45ecf9895be88ff8a10d0100134b1
+          ref: 52ec7ce63524bc440e634baa6c64a251f4466958
           path: runtime
           sparse-checkout: .github/scripts/agentic/publish-change.sh
           sparse-checkout-cone-mode: false
@@ -464,7 +464,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 9c013ca95bf45ecf9895be88ff8a10d0100134b1
+          ref: 52ec7ce63524bc440e634baa6c64a251f4466958
           path: runtime
           sparse-checkout: .github/actions/feishu-notify
           sparse-checkout-cone-mode: false
