@@ -3,7 +3,7 @@
 ## Fixed Runtime
 
 - Primary: `@openai/codex@0.145.0`, model `gpt-5.6-sol`.
-- Fallback: `@anthropic-ai/claude-code@2.1.148` package wrapper, model `fable-5`.
+- Fallback: `@anthropic-ai/claude-code@2.1.148` package wrapper, model `claude-opus-4-8`.
 - Reviewer timeouts: 45 minutes each; publisher runs only after reviewer jobs settle.
 
 ## Inputs and Secrets
@@ -29,7 +29,7 @@ critical_count     non-negative integer
 important_count    non-negative integer
 suggestion_count   non-negative integer
 comment_body       non-empty Markdown, <= 60000 characters
-reviewer/model     codex/gpt-5.6-sol | claude/fable-5
+reviewer/model     codex/gpt-5.6-sol | claude/claude-opus-4-8
 ```
 
 `APPROVE` requires all counts zero. `REQUEST_CHANGES` requires critical or important nonzero.

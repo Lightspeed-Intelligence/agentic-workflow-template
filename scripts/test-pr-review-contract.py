@@ -210,7 +210,7 @@ def test_publisher_gate(workflow: str) -> None:
 
     request_changes = valid | {
         "conclusion": "REQUEST_CHANGES", "important_count": 1,
-        "reviewer": "claude", "model": "fable-5",
+        "reviewer": "claude", "model": "claude-opus-4-8",
     }
     assert jq_accepts(program, request_changes)
 
@@ -223,7 +223,7 @@ def test_publisher_gate(workflow: str) -> None:
         valid | {"important_count": 0.5},
         valid | {"description": "bad\nsummary"},
         valid | {"comment_body": ""},
-        valid | {"model": "fable-5"},
+        valid | {"model": "claude-opus-4-8"},
     ]
     for value in invalid_values:
         assert not jq_accepts(program, value), value

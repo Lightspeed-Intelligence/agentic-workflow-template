@@ -1,6 +1,6 @@
 # Reusable Workflow: PR Review
 # 自动审查 PR：Codex (gpt-5.6-sol) 为主链路，失败时由 Claude Code
-# (fable-5) fallback。两个 Agent 都拥有完整的本地执行权限，但所在 job 的
+# (claude-opus-4-8) fallback。两个 Agent 都拥有完整的本地执行权限，但所在 job 的
 # GitHub token 只有只读权限且不注入 Agent 进程；评论由隔离的发布 job 代发。
 name: PR Review (Reusable)
 
@@ -498,7 +498,7 @@ jobs:
           node "$CLAUDE_WRAPPER" -p \
             --bare \
             --no-session-persistence \
-            --model fable-5 \
+            --model claude-opus-4-8 \
             --dangerously-skip-permissions \
             "${EXTRA_TOOL_ARGS[@]}" \
             --output-format json \
@@ -512,7 +512,7 @@ jobs:
             elif (has("conclusion") and has("comment_body")) then .
             else error("Claude 未产出结构化审查结果")
             end
-            | . + {reviewer: "claude", model: "fable-5"}
+            | . + {reviewer: "claude", model: "claude-opus-4-8"}
           ' "$RAW_RESULT" > "$GITHUB_WORKSPACE/review-output/review.json"
           jq -e '
             (.description | type == "string" and length > 0 and length <= 500 and (test("[\\r\\n]") | not)) and
@@ -587,7 +587,7 @@ jobs:
             (.comment_body | type == "string" and length > 0 and length <= 60000) and
             (
               (.reviewer == "codex" and .model == "gpt-5.6-sol") or
-              (.reviewer == "claude" and .model == "fable-5")
+              (.reviewer == "claude" and .model == "claude-opus-4-8")
             )
           ' "$REVIEW_FILE" > /dev/null
 
@@ -596,7 +596,7 @@ jobs:
           if [ "$REVIEWER" = "codex" ]; then
             FOOTER="本次审查由 Codex 主链路 (gpt-5.6-sol) 完成。"
           else
-            FOOTER="本次审查由 Claude Code fallback 链路 (fable-5) 完成；Codex 主链路执行失败，详情见 workflow run。"
+            FOOTER="本次审查由 Claude Code fallback 链路 (claude-opus-4-8) 完成；Codex 主链路执行失败，详情见 workflow run。"
           fi
           STATE_B64=$(jq -c \
             --arg head "${{ github.event.pull_request.head.sha }}" \
