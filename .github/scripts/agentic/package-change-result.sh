@@ -51,6 +51,20 @@ block_submodule_change() {
   exit 0
 }
 
+if [[ "$outcome" == NO_CHANGES || "$outcome" == READY ]]; then
+  worktree_status=$(git -C "$repo_dir" status --porcelain --untracked-files=all --ignore-submodules=none)
+  dirty_submodules=$(git -C "$repo_dir" submodule foreach --quiet --recursive '
+    if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+      printf "%s\n" "$displaypath"
+    fi
+  ')
+fi
+
+if [[ "$outcome" == NO_CHANGES && ( -n "$worktree_status" || -n "$dirty_submodules" ) ]]; then
+  echo "::error::NO_CHANGES result left a dirty repository or submodule worktree"
+  exit 1
+fi
+
 if [[ "$outcome" != READY ]]; then
   jq -n \
     --arg outcome "$outcome" \
@@ -62,16 +76,11 @@ if [[ "$outcome" != READY ]]; then
   exit 0
 fi
 
-if [[ -z "$(git -C "$repo_dir" status --porcelain --untracked-files=all)" ]]; then
+if [[ -z "$worktree_status" ]]; then
   echo "::error::READY result did not modify the worktree"
   exit 1
 fi
 
-dirty_submodules=$(git -C "$repo_dir" submodule foreach --quiet --recursive '
-  if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
-    printf "%s\n" "$displaypath"
-  fi
-')
 if [[ -n "$dirty_submodules" ]]; then
   echo "::notice::Blocking dirty submodule worktrees: $dirty_submodules"
   block_submodule_change

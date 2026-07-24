@@ -152,7 +152,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/agent-result"
           bash runtime/.github/scripts/agentic/normalize-answer-result.sh \
             "$RUNNER_TEMP/raw-result.json" "$RUNNER_TEMP/agent-result/result.json" \
-            codex gpt-5.6-sol
+            codex gpt-5.6-sol issue-dispatch
 
       - name: Upload Codex analysis
         uses: actions/upload-artifact@v4
@@ -254,7 +254,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/agent-result"
           bash runtime/.github/scripts/agentic/normalize-answer-result.sh \
             "$RUNNER_TEMP/raw-result.json" "$RUNNER_TEMP/agent-result/result.json" \
-            claude fable-5
+            claude fable-5 issue-dispatch
 
       - name: Upload Claude analysis
         uses: actions/upload-artifact@v4

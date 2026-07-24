@@ -54,6 +54,7 @@ jobs:
           ref: ${{ inputs.target_branch }}
           path: consumer
           fetch-depth: 0
+          submodules: recursive
           persist-credentials: false
           token: ${{ secrets.PAT_TOKEN || github.token }}
 
@@ -102,6 +103,7 @@ jobs:
           ref: ${{ needs.prepare.outputs.base_sha }}
           path: consumer
           fetch-depth: 0
+          submodules: recursive
           persist-credentials: false
           token: ${{ secrets.PAT_TOKEN || github.token }}
 
@@ -195,6 +197,7 @@ jobs:
           ref: ${{ needs.prepare.outputs.base_sha }}
           path: consumer
           fetch-depth: 0
+          submodules: recursive
           persist-credentials: false
           token: ${{ secrets.PAT_TOKEN || github.token }}
 
@@ -250,6 +253,7 @@ jobs:
           ref: ${{ needs.prepare.outputs.base_sha }}
           path: consumer
           fetch-depth: 0
+          submodules: recursive
           persist-credentials: false
           token: ${{ secrets.PAT_TOKEN || github.token }}
 
@@ -342,6 +346,7 @@ jobs:
           ref: ${{ needs.prepare.outputs.base_sha }}
           path: consumer
           fetch-depth: 0
+          submodules: recursive
           persist-credentials: false
           token: ${{ secrets.PAT_TOKEN || github.token }}
 

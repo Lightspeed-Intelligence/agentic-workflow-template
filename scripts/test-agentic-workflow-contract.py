@@ -138,6 +138,7 @@ def test_provider_and_permission_boundaries() -> None:
         publisher = job_block(WORKFLOWS[name].read_text(), final)
         assert "contents: write" in publisher
         assert "pull-requests: write" in publisher
+    assert WORKFLOWS["update-llmdoc"].read_text().count("submodules: recursive") == 5
 
     action = ACTION.read_text()
     install_block = action.split("    - name: Install pinned agent CLI without model credentials", 1)[1]
@@ -197,6 +198,39 @@ def test_issue_comment_markers_are_authenticated() -> None:
     publisher = (SCRIPTS / "publish-change.sh").read_text()
     assert "COMMENT_TOKEN: ${{ github.token }}" in implement
     assert 'GH_TOKEN="$COMMENT_TOKEN" gh issue comment' in publisher
+
+
+def test_answer_normalizers() -> None:
+    normalizer = SCRIPTS / "normalize-answer-result.sh"
+    with tempfile.TemporaryDirectory(prefix="answer-normalizer-") as tmp_name:
+        root = Path(tmp_name)
+
+        def accepts(value: dict[str, object], mode: str) -> bool:
+            source = root / "source.json"
+            output = root / "output.json"
+            source.write_text(json.dumps(value))
+            return run([
+                str(normalizer), str(source), str(output), "codex", "gpt-5.6-sol", mode,
+            ], check=False).returncode == 0
+
+        common = {
+            "description": "complete",
+            "result_status": "COMPLETE",
+            "comment_body": "body",
+        }
+        assert accepts(common, "question")
+        assert not accepts(common | {"extra": True}, "question")
+
+        dispatch = common | {
+            "issue_type": "bug",
+            "severity": "high",
+            "cost": "n/a",
+            "auto_fix_eligible": False,
+        }
+        assert accepts(dispatch, "issue-dispatch")
+        assert not accepts(common, "issue-dispatch")
+        assert not accepts(dispatch | {"auto_fix_eligible": "false"}, "issue-dispatch")
+        assert not accepts(dispatch | {"extra": True}, "issue-dispatch")
 
 
 def test_untrusted_text_is_not_shell_source() -> None:
@@ -271,6 +305,25 @@ def test_change_artifact_scripts() -> None:
         run([str(validate), str(no_change_artifact), str(no_change_repo), "implement"], env=env)
         assert not (no_change_artifact / "candidate.bundle").exists()
 
+        dirty_no_change_repo = root / "dirty-no-change"
+        dirty_no_change_base = init_repo(dirty_no_change_repo)
+        (dirty_no_change_repo / "file.txt").write_text("dirty tracked\n")
+        dirty_no_change_raw = root / "dirty-no-change.json"
+        dirty_no_change_raw.write_text(json.dumps(change_result("NO_CHANGES")))
+        assert run([
+            str(package), str(dirty_no_change_raw), str(dirty_no_change_repo),
+            str(root / "dirty-no-change-artifact"), dirty_no_change_base,
+            "codex", "gpt-5.6-sol", "implement",
+        ], check=False).returncode != 0
+
+        git(dirty_no_change_repo, "reset", "-q", "--hard", dirty_no_change_base)
+        (dirty_no_change_repo / "untracked.txt").write_text("dirty untracked\n")
+        assert run([
+            str(package), str(dirty_no_change_raw), str(dirty_no_change_repo),
+            str(root / "untracked-no-change-artifact"), dirty_no_change_base,
+            "codex", "gpt-5.6-sol", "implement",
+        ], check=False).returncode != 0
+
         docs_repo = root / "docs-repo"
         docs_base = init_repo(docs_repo)
         (docs_repo / "file.txt").write_text("invalid docs update\n")
@@ -313,6 +366,14 @@ def test_change_artifact_scripts() -> None:
         git(gitlink_repo / "module", "config", "commit.gpgsign", "false")
 
         (gitlink_repo / "module/file.txt").write_text("base\ndirty\n")
+        dirty_submodule_no_change = root / "dirty-submodule-no-change.json"
+        dirty_submodule_no_change.write_text(json.dumps(change_result("NO_CHANGES")))
+        assert run([
+            str(package), str(dirty_submodule_no_change), str(gitlink_repo),
+            str(root / "dirty-submodule-no-change-artifact"), gitlink_base,
+            "codex", "gpt-5.6-sol", "implement",
+        ], check=False).returncode != 0
+
         (gitlink_repo / "file.txt").write_text("base\ntop-level\n")
         dirty_raw = root / "gitlink-dirty.json"
         dirty_raw.write_text(json.dumps(change_result()))
@@ -434,6 +495,7 @@ def main() -> None:
     test_fallback_and_artifact_flow()
     test_issue_dispatch_is_analysis_only()
     test_issue_comment_markers_are_authenticated()
+    test_answer_normalizers()
     test_untrusted_text_is_not_shell_source()
     test_change_artifact_scripts()
     test_closes_is_publisher_owned()
