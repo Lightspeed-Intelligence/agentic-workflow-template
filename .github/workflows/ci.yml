@@ -9,13 +9,6 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
-# 授予所有 jobs 所需的权限
-permissions:
-  contents: write
-  issues: write
-  pull-requests: write
-  id-token: write
-
 jobs:
   pr-review-contract:
     if: github.event_name == 'pull_request'
@@ -31,12 +24,20 @@ jobs:
       - name: Test PR review contract
         run: python3 scripts/test-pr-review-contract.py
 
+      - name: Test agentic workflow contracts
+        run: python3 scripts/test-agentic-workflow-contract.py
+
   issue-dispatch:
     if: github.event_name == 'issues'
+    permissions:
+      contents: read
+      issues: write
     uses: ./.github/workflows/issue-dispatch.yml
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
     with:
@@ -44,10 +45,16 @@ jobs:
 
   implement:
     if: github.event_name == 'issue_comment' && github.event.issue.pull_request == null
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
     uses: ./.github/workflows/implement.yml
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
     with:
@@ -55,10 +62,15 @@ jobs:
 
   question:
     if: github.event_name == 'issue_comment' && github.event.issue.pull_request == null
+    permissions:
+      contents: read
+      issues: write
     uses: ./.github/workflows/question.yml
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
     with:
@@ -66,6 +78,9 @@ jobs:
 
   pr-review:
     if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: write
     uses: ./.github/workflows/pr-review.yml
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
