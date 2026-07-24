@@ -79,6 +79,10 @@ if [[ "$outcome" == READY ]]; then
   [[ "$(git -C "$publish_repo" rev-parse "$candidate_sha^")" == "$base_sha" ]]
   [[ "$(git -C "$publish_repo" rev-list --count "$base_sha..$candidate_sha")" == 1 ]]
   git -C "$publish_repo" diff --check "$base_sha..$candidate_sha"
+  if git -C "$publish_repo" diff --raw "$base_sha..$candidate_sha" | awk 'substr($1, 2) == "160000" || $2 == "160000" { found=1 } END { exit !found }'; then
+    echo "::error::Validated candidate changes a submodule gitlink"
+    exit 1
+  fi
 
   existing_pr=$(gh pr list --repo "$repository" --state open --head "$branch" \
     --json number,url,body --limit 1)

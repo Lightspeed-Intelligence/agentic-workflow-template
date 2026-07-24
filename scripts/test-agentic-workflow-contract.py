@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import subprocess
@@ -281,6 +282,102 @@ def test_change_artifact_scripts() -> None:
         ], check=False)
         assert rejected.returncode != 0
 
+        subrepo = root / "subrepo"
+        init_repo(subrepo)
+
+        add_repo = root / "gitlink-add"
+        add_base = init_repo(add_repo)
+        run([
+            "git", "-c", "protocol.file.allow=always", "submodule", "add", str(subrepo), "module",
+        ], cwd=add_repo)
+        add_raw = root / "gitlink-add.json"
+        add_raw.write_text(json.dumps(change_result()))
+        add_artifact = root / "gitlink-add-artifact"
+        run([
+            str(package), str(add_raw), str(add_repo), str(add_artifact), add_base,
+            "codex", "gpt-5.6-sol", "implement",
+        ])
+        assert json.loads((add_artifact / "manifest.json").read_text())["outcome"] == "BLOCKED"
+        assert not (add_artifact / "candidate.bundle").exists()
+
+        gitlink_repo = root / "gitlink-existing"
+        init_repo(gitlink_repo)
+        run([
+            "git", "-c", "protocol.file.allow=always", "submodule", "add", str(subrepo), "module",
+        ], cwd=gitlink_repo)
+        git(gitlink_repo, "commit", "-q", "-am", "add gitlink")
+        gitlink_base = git(gitlink_repo, "rev-parse", "HEAD")
+
+        git(gitlink_repo / "module", "config", "user.name", "Contract Test")
+        git(gitlink_repo / "module", "config", "user.email", "contract@example.invalid")
+        git(gitlink_repo / "module", "config", "commit.gpgsign", "false")
+        (gitlink_repo / "module/file.txt").write_text("base\nchanged\n")
+        git(gitlink_repo / "module", "commit", "-qam", "change submodule")
+        modify_raw = root / "gitlink-modify.json"
+        modify_raw.write_text(json.dumps(change_result()))
+        modify_artifact = root / "gitlink-modify-artifact"
+        run([
+            str(package), str(modify_raw), str(gitlink_repo), str(modify_artifact), gitlink_base,
+            "codex", "gpt-5.6-sol", "implement",
+        ])
+        assert json.loads((modify_artifact / "manifest.json").read_text())["outcome"] == "BLOCKED"
+
+        git(gitlink_repo, "reset", "-q", "--hard", gitlink_base)
+        git(gitlink_repo, "rm", "-q", "-f", "module")
+        delete_raw = root / "gitlink-delete.json"
+        delete_raw.write_text(json.dumps(change_result()))
+        delete_artifact = root / "gitlink-delete-artifact"
+        run([
+            str(package), str(delete_raw), str(gitlink_repo), str(delete_artifact), gitlink_base,
+            "codex", "gpt-5.6-sol", "implement",
+        ])
+        assert json.loads((delete_artifact / "manifest.json").read_text())["outcome"] == "BLOCKED"
+
+        # Bypass the packager to prove the independent validator rejects a deletion bundle too.
+        git(gitlink_repo, "reset", "-q", "--hard", gitlink_base)
+        if (gitlink_repo / "module").exists():
+            run(["git", "rm", "-q", "-f", "module"], cwd=gitlink_repo)
+        else:
+            git(gitlink_repo, "update-index", "--force-remove", "module")
+        git(gitlink_repo, "commit", "-q", "-m", "delete gitlink")
+        delete_candidate = git(gitlink_repo, "rev-parse", "HEAD")
+        bypass = root / "gitlink-bypass"
+        bypass.mkdir()
+        run(["git", "bundle", "create", str(bypass / "candidate.bundle"), "HEAD", f"^{gitlink_base}"], cwd=gitlink_repo)
+        bundle_sha = hashlib.sha256((bypass / "candidate.bundle").read_bytes()).hexdigest()
+        changed_files = git(gitlink_repo, "diff", "--name-only", f"{gitlink_base}..{delete_candidate}").splitlines()
+        bypass_result = change_result()
+        bypass_result.update({"reviewer": "codex", "model": "gpt-5.6-sol"})
+        (bypass / "result.json").write_text(json.dumps(bypass_result))
+        (bypass / "manifest.json").write_text(json.dumps({
+            "version": 1,
+            "outcome": "READY",
+            "base_sha": gitlink_base,
+            "candidate_sha": delete_candidate,
+            "bundle_sha256": bundle_sha,
+            "changed_files": changed_files,
+            "reviewer": "codex",
+            "model": "gpt-5.6-sol",
+        }))
+        git(gitlink_repo, "reset", "-q", "--hard", gitlink_base)
+        validator_rejected = run([
+            str(validate), str(bypass), str(gitlink_repo), "implement",
+        ], env=env, check=False)
+        assert validator_rejected.returncode != 0
+
+        detector = 'substr($1, 2) == "160000" || $2 == "160000"'
+        assert detector in package.read_text()
+        assert detector in validate.read_text()
+        assert detector in (SCRIPTS / "publish-change.sh").read_text()
+
+
+def test_closes_is_publisher_owned() -> None:
+    skill = (ROOT / ".claude/skills/implement/SKILL.md").read_text()
+    publisher = (SCRIPTS / "publish-change.sh").read_text()
+    assert "publisher 会统一追加一次关闭语句" in skill
+    assert "pr_body` 必须包含 `Closes" not in skill
+    assert publisher.count("Closes #%s") == 1
+
 
 def test_runtime_is_immutable() -> None:
     all_refs: set[str] = set()
@@ -324,6 +421,7 @@ def main() -> None:
     test_issue_comment_markers_are_authenticated()
     test_untrusted_text_is_not_shell_source()
     test_change_artifact_scripts()
+    test_closes_is_publisher_owned()
     test_runtime_is_immutable()
     print("agentic workflow contract fixtures passed")
 

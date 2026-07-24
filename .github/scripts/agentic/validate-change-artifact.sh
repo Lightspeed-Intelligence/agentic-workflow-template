@@ -63,7 +63,7 @@ git -C "$repo_dir" -c protocol.file.allow=always fetch "$bundle" "$candidate_sha
 [[ "$(git -C "$repo_dir" rev-list --count "$base_sha..$candidate_sha")" == 1 ]]
 git -C "$repo_dir" diff --check "$base_sha..$candidate_sha"
 
-if git -C "$repo_dir" diff --raw "$base_sha..$candidate_sha" | awk '$2 == "160000" || $4 == "160000" { found=1 } END { exit !found }'; then
+if git -C "$repo_dir" diff --raw "$base_sha..$candidate_sha" | awk 'substr($1, 2) == "160000" || $2 == "160000" { found=1 } END { exit !found }'; then
   echo "::error::Candidate changes a submodule gitlink"
   exit 1
 fi

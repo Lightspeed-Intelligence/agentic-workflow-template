@@ -39,7 +39,7 @@ description: 根据 Issue 的讨论和方案，在本地工作树实现功能或
 ## 特殊规则
 
 - 不创建或切换分支；publisher 使用由 Issue 编号确定的稳定分支名。
-- `pr_body` 必须包含 `Closes #${issue_number}`。
+- `pr_body` 不要包含 `Closes #${issue_number}`；publisher 会统一追加一次关闭语句。
 - 已完整实现且存在本地变更时输出 `READY`。
 - 任务已满足且无需变更时输出 `NO_CHANGES`。
 - 缺少业务决策、权限或遇到 submodule 跨仓库变更时输出 `BLOCKED`。

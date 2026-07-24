@@ -54,7 +54,7 @@ fi
 git -C "$repo_dir" diff --check
 git -C "$repo_dir" add -A
 
-if git -C "$repo_dir" diff --cached --raw | awk '$2 == "160000" || $4 == "160000" { found=1 } END { exit !found }'; then
+if git -C "$repo_dir" diff --cached --raw | awk 'substr($1, 2) == "160000" || $2 == "160000" { found=1 } END { exit !found }'; then
   jq -c '
     .outcome = "BLOCKED"
     | .description = "任务涉及 submodule 提交，自动发布暂不支持跨仓库变更"
