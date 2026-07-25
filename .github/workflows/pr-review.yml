@@ -444,7 +444,7 @@ jobs:
           test -f "$CLAUDE_WRAPPER"
           node "$CLAUDE_WRAPPER" --version
 
-      - name: Review with Claude Code and Fable-5
+      - name: Review with Claude Code and Claude Opus 4.8
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -491,17 +491,48 @@ jobs:
           fi
           mkdir -p "$SAFE_ROOT"
           cd "$SAFE_ROOT"
-          node "$CLAUDE_WRAPPER" -p \
-            --bare \
-            --no-session-persistence \
-            --model claude-opus-4-8 \
-            --dangerously-skip-permissions \
-            "${EXTRA_TOOL_ARGS[@]}" \
-            --output-format json \
-            --json-schema "$SCHEMA" \
-            < "$RUNNER_TEMP/review-prompt.txt" > "$RAW_RESULT"
+          if node "$CLAUDE_WRAPPER" -p \
+              --bare \
+              --no-session-persistence \
+              --model claude-opus-4-8 \
+              --dangerously-skip-permissions \
+              "${EXTRA_TOOL_ARGS[@]}" \
+              --output-format json \
+              --json-schema "$SCHEMA" \
+              < "$RUNNER_TEMP/review-prompt.txt" > "$RAW_RESULT"; then
+            :
+          else
+            claude_exit=$?
+            echo "::error::Claude Code 退出，状态码 ${claude_exit}"
+            if jq -e 'type == "object"' "$RAW_RESULT" > /dev/null 2>&1; then
+              jq -c '{
+                type: (.type? // null),
+                subtype: (.subtype? // null),
+                is_error: (.is_error? // null),
+                message: ((.error?.message? // .error? // .result? // .message? // "未知错误")
+                  | tostring | .[:4000])
+              }' "$RAW_RESULT" >&2
+            elif [ -s "$RAW_RESULT" ]; then
+              echo "::error::Claude Code 返回了非 JSON 响应（最多显示 4000 字符）"
+              head -c 4000 "$RAW_RESULT" >&2
+              echo >&2
+            else
+              echo "::error::Claude Code 未返回响应"
+            fi
+            exit "$claude_exit"
+          fi
 
-          jq -e '(.is_error? // false) == false' "$RAW_RESULT" > /dev/null
+          if ! jq -e '(.is_error? // false) == false' "$RAW_RESULT" > /dev/null; then
+            echo "::error::Claude Code 返回了 error 结果"
+            jq -c '{
+              type: (.type? // null),
+              subtype: (.subtype? // null),
+              is_error: (.is_error? // null),
+              message: ((.error?.message? // .error? // .result? // .message? // "未知错误")
+                | tostring | .[:4000])
+            }' "$RAW_RESULT" >&2
+            exit 1
+          fi
           mkdir -p "$GITHUB_WORKSPACE/review-output"
           jq -c '
             if (.structured_output? | type) == "object" then .structured_output
@@ -510,7 +541,7 @@ jobs:
             end
             | . + {reviewer: "claude", model: "claude-opus-4-8"}
           ' "$RAW_RESULT" > "$GITHUB_WORKSPACE/review-output/review.json"
-          jq -e '
+          if ! jq -e '
             (.description | type == "string" and length > 0 and length <= 500 and (test("[\\r\\n]") | not)) and
             (.review_status == "COMPLETE") and
             (.conclusion | IN("APPROVE", "REQUEST_CHANGES", "COMMENT")) and
@@ -523,7 +554,11 @@ jobs:
               (.conclusion == "REQUEST_CHANGES" and (.critical_count > 0 or .important_count > 0)) or
               (.conclusion == "COMMENT" and .critical_count == 0 and .important_count == 0)
             )
-          ' "$GITHUB_WORKSPACE/review-output/review.json" > /dev/null
+          ' "$GITHUB_WORKSPACE/review-output/review.json" > /dev/null; then
+            echo "::error::Claude 审查结果未通过发布契约"
+            jq -c 'del(.comment_body)' "$GITHUB_WORKSPACE/review-output/review.json" >&2
+            exit 1
+          fi
 
       - name: Upload Claude review result
         uses: actions/upload-artifact@v4

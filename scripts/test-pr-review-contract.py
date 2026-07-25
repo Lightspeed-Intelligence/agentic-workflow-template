@@ -301,6 +301,16 @@ def test_model_secret_routing(workflow: str, caller: str) -> None:
     assert 'BASE_URL="${ANTHROPIC_BASE_URL:-https://llm.fantacy.live}"' in workflow
 
 
+def test_claude_failure_diagnostics(workflow: str) -> None:
+    assert "Review with Claude Code and Fable-5" not in workflow
+    assert "Review with Claude Code and Claude Opus 4.8" in workflow
+    assert 'if node "$CLAUDE_WRAPPER" -p \\' in workflow
+    assert "Claude Code 退出，状态码" in workflow
+    assert "Claude Code 返回了 error 结果" in workflow
+    assert "Claude 审查结果未通过发布契约" in workflow
+    assert '.error?.message? // .error? // .result? // .message?' in workflow
+
+
 def test_checkout_credentials(workflow: str, caller: str) -> None:
     checkout_token = 'token: ${{ secrets.PAT_TOKEN || github.token }}'
     assert workflow.count(checkout_token) == 2
@@ -382,6 +392,7 @@ def main() -> None:
     test_publisher_gate(workflow)
     test_extra_allowed_tools(workflow)
     test_model_secret_routing(workflow, caller)
+    test_claude_failure_diagnostics(workflow)
     test_checkout_credentials(workflow, caller)
     test_trusted_policy_source(workflow)
     print("pr-review contract fixtures passed")
