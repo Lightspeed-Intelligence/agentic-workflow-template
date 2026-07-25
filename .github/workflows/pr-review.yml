@@ -1,6 +1,6 @@
 # Reusable Workflow: PR Review
 # 自动审查 PR：Codex (gpt-5.6-sol) 为主链路，失败时由 Claude Code
-# (claude-opus-4-8) fallback。两个 Agent 都拥有完整的本地执行权限，但所在 job 的
+# (claude-opus-5) fallback。两个 Agent 都拥有完整的本地执行权限，但所在 job 的
 # GitHub token 只有只读权限且不注入 Agent 进程；评论由隔离的发布 job 代发。
 name: PR Review (Reusable)
 
@@ -75,7 +75,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: dbf05344dfc582d63a18442f81a370926a445700
+          ref: e00fbc64c624c15f89a037bee7011d98693c3406
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review
@@ -313,7 +313,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: dbf05344dfc582d63a18442f81a370926a445700
+          ref: e00fbc64c624c15f89a037bee7011d98693c3406
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review
@@ -444,7 +444,7 @@ jobs:
           test -f "$CLAUDE_WRAPPER"
           node "$CLAUDE_WRAPPER" --version
 
-      - name: Review with Claude Code and Fable-5
+      - name: Review with Claude Code and Claude Opus 5
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -494,7 +494,7 @@ jobs:
           node "$CLAUDE_WRAPPER" -p \
             --bare \
             --no-session-persistence \
-            --model claude-opus-4-8 \
+            --model claude-opus-5 \
             --dangerously-skip-permissions \
             "${EXTRA_TOOL_ARGS[@]}" \
             --output-format json \
@@ -508,7 +508,7 @@ jobs:
             elif (has("conclusion") and has("comment_body")) then .
             else error("Claude 未产出结构化审查结果")
             end
-            | . + {reviewer: "claude", model: "claude-opus-4-8"}
+            | . + {reviewer: "claude", model: "claude-opus-5"}
           ' "$RAW_RESULT" > "$GITHUB_WORKSPACE/review-output/review.json"
           jq -e '
             (.description | type == "string" and length > 0 and length <= 500 and (test("[\\r\\n]") | not)) and
@@ -583,7 +583,7 @@ jobs:
             (.comment_body | type == "string" and length > 0 and length <= 60000) and
             (
               (.reviewer == "codex" and .model == "gpt-5.6-sol") or
-              (.reviewer == "claude" and .model == "claude-opus-4-8")
+              (.reviewer == "claude" and .model == "claude-opus-5")
             )
           ' "$REVIEW_FILE" > /dev/null
 
@@ -592,7 +592,7 @@ jobs:
           if [ "$REVIEWER" = "codex" ]; then
             FOOTER="本次审查由 Codex 主链路 (gpt-5.6-sol) 完成。"
           else
-            FOOTER="本次审查由 Claude Code fallback 链路 (claude-opus-4-8) 完成；Codex 主链路执行失败，详情见 workflow run。"
+            FOOTER="本次审查由 Claude Code fallback 链路 (claude-opus-5) 完成；Codex 主链路执行失败，详情见 workflow run。"
           fi
           STATE_B64=$(jq -c \
             --arg head "${{ github.event.pull_request.head.sha }}" \

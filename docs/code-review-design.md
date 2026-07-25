@@ -126,10 +126,10 @@ question:
 ```mermaid
 flowchart TD
     A["Step 1: 只读 Checkout<br/>固定 PR head/base SHA<br/>可选 PAT 读私有 submodule<br/>不持久化 Git 凭据"]
-    B["Step 2: 准备可信输入<br/>template 固定 commit 的 Skill/SOP/输出规范<br/>consumer base 的历史准备脚本<br/>选择 full / incremental diff"]
+    B["Step 2: 准备可信输入<br/>template 固定 commit 的单文件审查 Skill<br/>consumer base 的历史准备脚本<br/>选择 full / incremental diff"]
     C["Step 3: Codex + GPT-5.6-sol<br/>完整本地执行权限"]
     D{"Codex 进程、结构校验<br/>且无软失败信号?"}
-    E["Step 4: 独立 runner<br/>Claude Code + Fable-5 fallback"]
+    E["Step 4: 独立 runner<br/>Claude Code + Claude Opus 5 fallback"]
     F["Step 5: 上传结构化结果 artifact"]
     G["Step 6: 独立发布 Job<br/>校验 JSON 后代发 PR 评论"]
     H["Step 7: Step Summary + 飞书通知"]
@@ -148,7 +148,7 @@ flowchart TD
 ```mermaid
 flowchart TD
     start["从安全临时目录启动<br/>不自动加载 PR 中的配置/Hook"]
-    load["加载 base commit 的 pr-review 三件套<br/>入口 + 对抗式 SOP + 输出规范"]
+    load["加载 template 固定 commit 的 pr-review/SKILL.md<br/>完整审查与输出规范"]
     full["读取预生成的审查范围和历史结论<br/>Agent 不查询评论、不持有 GitHub token"]
     review["逐文件审查代码<br/>标记高信号问题"]
     json["返回结构化 JSON<br/>包含待发布 comment_body"]
@@ -223,23 +223,19 @@ sequenceDiagram
 
 ## Skill 系统：AI 的"工作手册"
 
-Agent 的审查行为受 `.claude/skills/` 目录下的 Markdown 文件约束。为避免 PR 自己篡改规则，审查 workflow 固定从 base commit 读取 Skill；可以把 Skill 理解成给 AI 写的 SOP（标准作业流程）。
+Agent 的审查行为受 `.claude/skills/` 目录下的 Markdown 文件约束。为避免 PR 自己篡改规则，审查 workflow 从 template 仓库的固定 commit 读取 Skill；可以把 Skill 理解成给 AI 写的 SOP（标准作业流程）。
 
 ```mermaid
 graph TD
     base["github-comment/SKILL.md<br/>基础规范：语言、格式、链接"]
 
-    pr["pr-review/SKILL.md<br/>信任、范围和发布边界"]
-    sop["references/review-sop.md<br/>对抗式审查与交叉验证"]
-    fmt["references/output-format.md<br/>严重度、计数和评论结构"]
+    pr["pr-review/SKILL.md<br/>范围、审查方法、严重度与输出契约"]
     bug["bug-analyze/SKILL.md<br/>Bug 分析规则"]
     feat["feature-review/SKILL.md<br/>需求评审规则"]
     impl["implement/SKILL.md<br/>代码实现规则"]
     qa["answer-question/SKILL.md<br/>通用问答规则"]
 
     base --> pr
-    pr --> sop
-    pr --> fmt
     base --> bug
     base --> feat
     base --> impl
@@ -248,9 +244,8 @@ graph TD
     style base fill:#e8eaf6,stroke:#3F51B5,stroke-width:2px
 ```
 
-`pr-review` 三件套把信任/发布边界、具体审查方法和输出契约分开维护。入口要求严格
-遵循 workflow 认证的 full/incremental 范围并核对历史 finding，SOP 负责风险分级和
-代码/文档/可观测性的对抗式交叉验证，输出规范负责 finding 严重度与结构化计数一致。
+`pr-review/SKILL.md` 单文件集中维护信任/发布边界、full/incremental 范围、审查方法、
+风险分级和输出契约，避免运行时只加载部分规范。结构化 finding 计数仍必须与评论正文一致。
 
 以 `pr-review` Skill 为例，它规定了几件事：
 

@@ -3,7 +3,7 @@
 ## Fixed Runtime
 
 - Primary: `@openai/codex@0.145.0`, model `gpt-5.6-sol`.
-- Fallback: `@anthropic-ai/claude-code@2.1.148` package wrapper, model `claude-opus-4-8`.
+- Fallback: `@anthropic-ai/claude-code@2.1.148` package wrapper, model `claude-opus-5`.
 - Reviewer timeouts: 45 minutes each; publisher runs only after reviewer jobs settle.
 
 ## Inputs and Secrets
@@ -29,7 +29,7 @@ critical_count     non-negative integer
 important_count    non-negative integer
 suggestion_count   non-negative integer
 comment_body       non-empty Markdown, <= 60000 characters
-reviewer/model     codex/gpt-5.6-sol | claude/claude-opus-4-8
+reviewer/model     codex/gpt-5.6-sol | claude/claude-opus-5
 ```
 
 `APPROVE` requires all counts zero. `REQUEST_CHANGES` requires critical or important nonzero.
@@ -38,9 +38,9 @@ Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even w
 
 ## Review Range and History
 
-- Reviewer Skill/SOP/output policy comes from immutable template revision
-  `dbf05344dfc582d63a18442f81a370926a445700`, not from the consumer repository. Consumer bases may
-  therefore use older/no split policy layout without breaking review.
+- The complete reviewer policy comes from the single `pr-review/SKILL.md` at immutable template revision
+  `e00fbc64c624c15f89a037bee7011d98693c3406`, not from the consumer repository. Consumer bases need
+  no matching reviewer-policy layout.
 - History preparation uses only the base-SHA script. When base has no copy, deterministic workflow
   commands generate full `base...head` inputs with reason `trusted_preparation_unavailable`; PR-head
   preparation code is never executed.
@@ -81,5 +81,3 @@ Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even w
 - `.github/scripts/pr-review/prepare-review-history.sh`
 - `scripts/test-pr-review-contract.py`
 - `.claude/skills/pr-review/SKILL.md`
-- `.claude/skills/pr-review/references/review-sop.md`
-- `.claude/skills/pr-review/references/output-format.md`

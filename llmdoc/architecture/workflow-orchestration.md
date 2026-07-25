@@ -22,7 +22,7 @@ copying Agent logic.
 3. A prepare job freezes event data and the consumer source SHA. The relevant Skill and shared runner
    come from an immutable template commit; consumers do not distribute template policy.
 4. Codex runs first without GitHub write credentials. Process, schema or structured soft failure starts
-   Claude Code from the same fixed input in a fresh runner.
+   Claude Code with `claude-opus-5` from the same fixed input in a fresh runner.
 5. Pure-answer workflows transfer validated JSON. Code-writing workflows transfer a single-parent Git
    bundle which a separate read-only job validates before publication.
 6. Only the terminal `answer`, `dispatch`, `implement`, `update` or `review` job may publish. Stable

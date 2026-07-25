@@ -21,7 +21,7 @@
   the same uncommitted or not-yet-addressable tree.
 - Pin template-owned reviewer policy to an immutable template revision. Use the consumer base SHA only
   for consumer-owned trusted inputs such as history preparation; never require a consumer to copy the
-  template's split policy files.
+  template's reviewer policy file.
 - If a consumer base lacks an optional trusted preparation script, generate full-review inputs with
   deterministic workflow commands. Never execute a PR-head copy as a bootstrap fallback.
 - A private-submodule PAT may be used by `actions/checkout` with `persist-credentials: false`; never
@@ -81,7 +81,7 @@ credential changes, exercise or explicitly account for:
 
 1. a repository without submodules;
 2. a private cross-repository submodule using checkout-only PAT access;
-3. an older consumer without the template's latest split policy/history files.
+3. an older consumer without the latest history-preparation script and without any copied reviewer policy.
 
 After changing a reusable workflow referenced through a moving ref such as `@main`, trigger a fresh
 consumer event/run. GitHub reruns keep the reusable-workflow commit resolved for the original run, so
