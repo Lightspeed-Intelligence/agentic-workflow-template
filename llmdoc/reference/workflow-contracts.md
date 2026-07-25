@@ -23,7 +23,8 @@ revision; after updating a moving ref, use a fresh matching event/run to consume
 - Required model credential: `ANTHROPIC_API_KEY`.
 - Optional: `ANTHROPIC_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `FEISHU_WEBHOOK_TOKEN`.
 - Every Codex job resolves optional `OPENAI_API_KEY` and `OPENAI_BASE_URL` independently, falling back
-  per field to the corresponding `ANTHROPIC_*` secret. Claude receives only `ANTHROPIC_*`.
+  per field to the corresponding `ANTHROPIC_*` secret. Every Claude fallback uses `claude-opus-5`
+  and receives only `ANTHROPIC_*`.
 - `PAT_TOKEN` is for private-submodule checkout and, in code-writing workflows, the isolated publisher.
   Checkouts disable credential persistence and Agent processes never receive PAT or GitHub tokens.
 

@@ -170,9 +170,9 @@ inputs:
   extra_allowed_tools: 'Bash(git -C tipsy-app diff:*),Bash(git -C tipsy-app log:*)'
 ```
 
-四个 Issue/文档 workflow 与 PR 审查都优先使用 Codex + GPT-5.6-sol，进程失败、schema
-失败或结构化 `INCOMPLETE` 时才启动全新 runner 中的 Claude Code + Fable-5。有效的
-`BLOCKED` / `NO_CHANGES` 是业务结果，不触发 fallback。
+四个 Issue/文档 workflow 与 PR 审查都优先使用 Codex + GPT-5.6-sol。进程失败、schema
+失败或结构化失败状态会在全新 runner 中启动 Claude Code + `claude-opus-5` fallback。
+有效的 `BLOCKED` / `NO_CHANGES` 是业务结果，不触发 fallback。
 
 纯回答 workflow 只跨 job 传递 JSON artifact；写代码 workflow 传递单父提交 Git bundle，
 由无写权限 validator 校验后才交给 publisher。Agent 进程不接收 PAT 或 GitHub token，
@@ -186,8 +186,8 @@ PR 审查评论同样由单独的发布 job 校验结构化结果后代发。Cod
 `INCOMPLETE`；某个项目测试因 runner 缺少工具或版本而未运行，应记录但不会单独使审查失败。
 
 PR 审查规范由 reusable workflow 所在的 template 仓库以固定 commit 提供；
-调用方仓库无需复制 `review-sop.md` 或 `output-format.md`。调用方 base checkout
-只用于获取可选的历史审查准备脚本，缺失时安全降级为完整审查。
+调用方仓库无需复制 reviewer policy。完整审查规范集中在单个 `pr-review/SKILL.md`
+中；调用方 base checkout 只用于获取可选的历史审查准备脚本，缺失时安全降级为完整审查。
 
 每次 Agent 启动前，确定性准备步骤会使用 job 的只读 token 读取最新一条由
 `github-actions` App 发布、且带有 publisher 生成的结构化状态标记的历史 review。
@@ -232,7 +232,7 @@ Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有
 │       ├── feature-review/
 │       ├── implement/
 │       ├── update-llmdoc/
-│       ├── pr-review/       # 入口 + references/review-sop.md、output-format.md
+│       ├── pr-review/       # 单文件 PR 审查规范
 │       └── answer-question/
 ├── scripts/                 # Submodule 管理与 workflow 合同测试
 │   ├── init.sh
@@ -278,7 +278,7 @@ Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有
   "important_count": 1,
   "suggestion_count": 2,
   "reviewer": "codex | claude",
-  "model": "gpt-5.6-sol | claude-opus-4-8"
+  "model": "gpt-5.6-sol | claude-opus-5"
 }
 
 // question
@@ -286,7 +286,7 @@ Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有
   "description": "回答内容摘要",
   "result_status": "COMPLETE",
   "reviewer": "codex | claude",
-  "model": "gpt-5.6-sol | claude-opus-4-8"
+  "model": "gpt-5.6-sol | claude-opus-5"
 }
 ```
 

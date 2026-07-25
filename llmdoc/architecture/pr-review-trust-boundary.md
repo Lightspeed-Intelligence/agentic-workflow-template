@@ -10,7 +10,7 @@ Allow deep local code analysis while preventing model-driven processes from writ
 pull_request event
   -> deterministic preparation: authenticate structured Bot history, select full/incremental range
   -> codex_review: read-only token, full local execution, gpt-5.6-sol
-  -> on process/schema/soft failure: independent claude_review, read-only token, claude-opus-4-8
+  -> on process/schema/soft failure: independent claude_review, read-only token, claude-opus-5
   -> one-day structured artifact
   -> publish: deterministic validation, pull-requests: write, gh pr comment
   -> optional Feishu notification
@@ -18,9 +18,9 @@ pull_request event
 
 ## Trust Classes
 
-- Trusted reviewer policy: immutable template-repository revision checkout of `pr-review/SKILL.md`,
-  `review-sop.md`, `output-format.md` and `github-comment/SKILL.md` into sanitized `.trusted-policy`.
-- Consumer repositories do not need to copy the split reviewer policy files. Their exact base-SHA
+- Trusted reviewer policy: immutable template-repository revision checkout of the complete single-file
+  `pr-review/SKILL.md` and `github-comment/SKILL.md` into sanitized `.trusted-policy`.
+- Consumer repositories do not need to copy template-owned reviewer policy files. Their exact base-SHA
   checkout in `.trusted-base` supplies only the optional history-preparation script.
 - History-preparation code comes only from the consumer base-SHA checkout. If the script is absent from
   base, no PR-head preparation code runs; deterministic workflow commands select a complete
@@ -86,4 +86,4 @@ has full local access and the input cannot grant GitHub credentials.
 - `.github/scripts/pr-review/prepare-review-history.sh`: base-pinned history authentication and range selection.
 - `scripts/test-pr-review-contract.py`: tracked offline truth-table fixtures run by CI.
 - `.github/workflows/ci.yml`: local trigger and secret forwarding.
-- `.claude/skills/pr-review/`: policy authoring source; runtime uses the exact revision pinned by the workflow.
+- `.claude/skills/pr-review/SKILL.md`: complete policy authoring source; runtime uses the exact revision pinned by the workflow.

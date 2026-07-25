@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/pr-review.yml"
 CALLER = ROOT / ".github/workflows/ci.yml"
 PREPARE = ROOT / ".github/scripts/pr-review/prepare-review-history.sh"
+README = ROOT / "README.md"
+QUESTION_WORKFLOW = ROOT / ".github/workflows/question.yml"
 
 
 def run(args: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None,
@@ -210,7 +212,7 @@ def test_publisher_gate(workflow: str) -> None:
 
     request_changes = valid | {
         "conclusion": "REQUEST_CHANGES", "important_count": 1,
-        "reviewer": "claude", "model": "claude-opus-4-8",
+        "reviewer": "claude", "model": "claude-opus-5",
     }
     assert jq_accepts(program, request_changes)
 
@@ -223,7 +225,7 @@ def test_publisher_gate(workflow: str) -> None:
         valid | {"important_count": 0.5},
         valid | {"description": "bad\nsummary"},
         valid | {"comment_body": ""},
-        valid | {"model": "claude-opus-4-8"},
+        valid | {"model": "claude-opus-5"},
     ]
     for value in invalid_values:
         assert not jq_accepts(program, value), value
@@ -301,6 +303,17 @@ def test_model_secret_routing(workflow: str, caller: str) -> None:
     assert 'BASE_URL="${ANTHROPIC_BASE_URL:-https://llm.fantacy.live}"' in workflow
 
 
+def test_model_names(workflow: str, readme: str, question_workflow: str) -> None:
+    assert workflow.count("--model claude-opus-5") == 1
+    assert "claude-opus-4-8" not in workflow
+
+    pr_example = re.search(r"// pr-review\n\{.*?\n\}", readme, re.DOTALL)
+    question_example = re.search(r"// question\n\{.*?\n\}", readme, re.DOTALL)
+    assert pr_example and '"model": "gpt-5.6-sol | claude-opus-5"' in pr_example.group(0)
+    assert question_example and '"model": "gpt-5.6-sol | claude-opus-5"' in question_example.group(0)
+    assert "model: claude-opus-5" in question_workflow
+
+
 def test_checkout_credentials(workflow: str, caller: str) -> None:
     checkout_token = 'token: ${{ secrets.PAT_TOKEN || github.token }}'
     assert workflow.count(checkout_token) == 2
@@ -311,13 +324,24 @@ def test_checkout_credentials(workflow: str, caller: str) -> None:
 
 
 def test_trusted_policy_source(workflow: str) -> None:
-    policy_sha = "dbf05344dfc582d63a18442f81a370926a445700"
+    policy_sha = "e00fbc64c624c15f89a037bee7011d98693c3406"
     assert workflow.count("repository: Lightspeed-Intelligence/agentic-workflow-template") == 2
     assert workflow.count(f"ref: {policy_sha}") == 2
     assert workflow.count("path: .trusted-policy") == 2
     assert workflow.count(".trusted-policy/.claude/skills/pr-review/SKILL.md") == 2
+    assert "review-sop.md" not in workflow
+    assert "output-format.md" not in workflow
     assert ".trusted-base/.claude/skills/" not in workflow
     assert workflow.count("sparse-checkout: .github/scripts/pr-review/prepare-review-history.sh") == 2
+
+    policy_files = run([
+        "git", "ls-tree", "-r", "--name-only", policy_sha, "--", ".claude/skills/pr-review",
+    ], cwd=ROOT).stdout.splitlines()
+    assert policy_files == [".claude/skills/pr-review/SKILL.md"]
+    pinned_skill = run([
+        "git", "show", f"{policy_sha}:.claude/skills/pr-review/SKILL.md",
+    ], cwd=ROOT).stdout
+    assert pinned_skill == (ROOT / ".claude/skills/pr-review/SKILL.md").read_text()
 
 
 def test_prepare_script_selection(workflow: str, repo_info: dict[str, str]) -> None:
@@ -373,6 +397,8 @@ def test_prepare_script_selection(workflow: str, repo_info: dict[str, str]) -> N
 def main() -> None:
     workflow = WORKFLOW.read_text()
     caller = CALLER.read_text()
+    readme = README.read_text()
+    question_workflow = QUESTION_WORKFLOW.read_text()
     run(["bash", "-n", str(PREPARE)])
     with tempfile.TemporaryDirectory(prefix="pr-review-repo-") as tmp_name:
         repo_info = make_repo(Path(tmp_name))
@@ -382,6 +408,7 @@ def main() -> None:
     test_publisher_gate(workflow)
     test_extra_allowed_tools(workflow)
     test_model_secret_routing(workflow, caller)
+    test_model_names(workflow, readme, question_workflow)
     test_checkout_credentials(workflow, caller)
     test_trusted_policy_source(workflow)
     print("pr-review contract fixtures passed")

@@ -115,6 +115,8 @@ def test_provider_and_permission_boundaries() -> None:
         assert text.count("api_key: ${{ secrets.OPENAI_API_KEY || secrets.ANTHROPIC_API_KEY }}") == 1
         assert text.count("base_url: ${{ secrets.OPENAI_BASE_URL || secrets.ANTHROPIC_BASE_URL }}") == 1
         assert text.count("api_key: ${{ secrets.ANTHROPIC_API_KEY }}") == 1
+        assert text.count("model: claude-opus-5") == 1
+        assert "fable-5" not in text.lower()
         assert "github_token:" not in text
         assert "id-token:" not in text
 
@@ -300,7 +302,7 @@ def test_change_artifact_scripts() -> None:
         no_change_artifact = root / "no-change-artifact"
         run([
             str(package), str(no_change_raw), str(no_change_repo), str(no_change_artifact),
-            no_change_base, "claude", "fable-5", "implement",
+            no_change_base, "claude", "claude-opus-5", "implement",
         ])
         run([str(validate), str(no_change_artifact), str(no_change_repo), "implement"], env=env)
         assert not (no_change_artifact / "candidate.bundle").exists()
