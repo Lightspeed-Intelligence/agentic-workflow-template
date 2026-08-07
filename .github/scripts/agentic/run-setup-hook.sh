@@ -28,7 +28,25 @@ case "$mode" in
     ;;
 esac
 
-# 所有模式都要求准备脚本执行后工作树保持洁净。
+# 口径与 package-change-result.sh 保持一致：--ignore-submodules=none 覆盖消费仓库把
+# submodule.<name>.ignore 设为 all 的情况，递归 foreach 捕获 submodule 内部的脏状态。
+worktree_status() {
+  git -C "$repo_dir" status --porcelain --untracked-files=all --ignore-submodules=none
+  git -C "$repo_dir" submodule foreach --quiet --recursive '
+    if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+      printf "dirty submodule: %s\n" "$displaypath"
+    fi
+  '
+}
+
+# 在执行准备脚本之前记录基线。调用方可能把自己创建的目录放在 repo_dir 之内——
+# pr-review 就把 .trusted-base 与 .trusted-policy checkout 到 $GITHUB_WORKSPACE，而它
+# 又以同一个目录作为 repo_dir。这些目录属于 workflow 的实现细节，在准备脚本运行前就
+# 已存在，不该被算作「准备脚本弄脏了工作树」。只比较基线之后新增的条目，因此不必让
+# 这个共享脚本知道任何调用方的路径约定。
+baseline_status=$(worktree_status)
+
+# 所有模式都要求准备脚本执行后不新增脏状态。
 #
 # change 模式：残留改动会被 package-change-result.sh 的 `git add -A` 静默打包进候选提交。
 #
@@ -37,21 +55,14 @@ esac
 # 的后果。question 与 pr-review 不会失败，但 Agent 会基于已偏离固定 SHA 的 checkout 分析，
 # 与「准备脚本只影响验证工具链、不影响审查什么」这条契约矛盾。
 assert_clean_worktree() {
-  local dirty dirty_submodules
-  # 口径与 package-change-result.sh 保持一致：--ignore-submodules=none 覆盖消费仓库把
-  # submodule.<name>.ignore 设为 all 的情况，递归 foreach 捕获 submodule 内部的脏状态。
-  # 否则准备脚本弄脏 submodule 时，用户会看到「不支持跨仓库修改」这种与实际原因不符的
-  # BLOCKED，而不是「你的准备脚本改动了工作树」。
-  dirty=$(git -C "$repo_dir" status --porcelain --untracked-files=all --ignore-submodules=none)
-  dirty_submodules=$(git -C "$repo_dir" submodule foreach --quiet --recursive '
-    if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
-      printf "%s\n" "$displaypath"
-    fi
-  ')
-  if [[ -n "$dirty" || -n "$dirty_submodules" ]]; then
+  local current added
+  current=$(worktree_status)
+  # 逐行比对整条 porcelain 记录，路径含空格也不会被拆开。基线中已存在的条目不再报告。
+  added=$(comm -13 <(printf '%s\n' "$baseline_status" | sort) \
+                   <(printf '%s\n' "$current" | sort) | sed '/^$/d')
+  if [[ -n "$added" ]]; then
     echo "::error::环境准备脚本改动了工作树，其产物必须被 .gitignore 覆盖："
-    [[ -n "$dirty" ]] && printf '%s\n' "$dirty" >&2
-    [[ -n "$dirty_submodules" ]] && printf 'dirty submodule: %s\n' "$dirty_submodules" >&2
+    printf '%s\n' "$added" >&2
     exit 1
   fi
 }
