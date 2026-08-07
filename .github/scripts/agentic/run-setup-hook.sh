@@ -32,11 +32,21 @@ esac
 # 被 package-change-result.sh 的 `git add -A` 静默打包进候选提交，因此必须拒绝。
 assert_clean_worktree() {
   [[ "$mode" == change ]] || return 0
-  local dirty
-  dirty=$(git -C "$repo_dir" status --porcelain --untracked-files=all)
-  if [[ -n "$dirty" ]]; then
+  local dirty dirty_submodules
+  # 口径与 package-change-result.sh 保持一致：--ignore-submodules=none 覆盖消费仓库把
+  # submodule.<name>.ignore 设为 all 的情况，递归 foreach 捕获 submodule 内部的脏状态。
+  # 否则准备脚本弄脏 submodule 时，用户会看到「不支持跨仓库修改」这种与实际原因不符的
+  # BLOCKED，而不是「你的准备脚本改动了工作树」。
+  dirty=$(git -C "$repo_dir" status --porcelain --untracked-files=all --ignore-submodules=none)
+  dirty_submodules=$(git -C "$repo_dir" submodule foreach --quiet --recursive '
+    if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+      printf "%s\n" "$displaypath"
+    fi
+  ')
+  if [[ -n "$dirty" || -n "$dirty_submodules" ]]; then
     echo "::error::环境准备脚本改动了工作树，其产物必须被 .gitignore 覆盖："
-    printf '%s\n' "$dirty" >&2
+    [[ -n "$dirty" ]] && printf '%s\n' "$dirty" >&2
+    [[ -n "$dirty_submodules" ]] && printf 'dirty submodule: %s\n' "$dirty_submodules" >&2
     exit 1
   fi
 }
@@ -80,7 +90,18 @@ fi
 echo "::notice::执行环境准备脚本 $script_path"
 log="${RUNNER_TEMP:-/tmp}/setup-hook.log"
 hook_status=0
-(cd "$repo_dir" && bash "$hook") > "$log" 2>&1 || hook_status=$?
+# 用 timeout 自行限时，而不是只依赖步骤级 timeout-minutes。步骤级超时由 runner 直接
+# 杀掉整个进程树并判定步骤失败，下面的降级分支不会执行；由脚本自己限时可以把超时变成
+# 普通的非零退出码，走同一条披露路径。步骤级 timeout-minutes 仍作为更宽的兜底。
+timeout --signal=TERM --kill-after=30s "${SETUP_HOOK_TIMEOUT:-13m}" \
+  bash -c 'cd "$1" && bash "$2"' _ "$repo_dir" "$hook" > "$log" 2>&1 || hook_status=$?
+
+# GNU timeout 用 124 表示超时。
+if [[ "$hook_status" -eq 124 ]]; then
+  echo "::warning::环境准备脚本超过 ${SETUP_HOOK_TIMEOUT:-13m} 未完成，已终止"
+  printf '\n环境准备: 执行 %s 超过 %s 未完成，已被终止。\n' \
+    "$script_path" "${SETUP_HOOK_TIMEOUT:-13m}" >> "$prompt_file"
+fi
 
 if [[ "$hook_status" -eq 0 ]]; then
   echo "::notice::环境准备脚本执行成功"
@@ -91,7 +112,7 @@ if [[ "$hook_status" -eq 0 ]]; then
 fi
 
 # 执行失败不终止任务：让 Agent 在降级环境下继续工作并披露限制，比让整条链路失败、
-# 最终一条结论都产出不了要好。步骤超时同样走这条路径，此时准备工作只是未完成，
+# 最终一条结论都产出不了要好。脚本自身的超时也走这条路径，此时准备工作只是未完成，
 # 已写入的 GITHUB_ENV/GITHUB_PATH 与半装好的依赖仍然存在。
 echo "::warning::环境准备脚本以退出码 $hook_status 结束，任务继续但验证能力可能受限"
 {
