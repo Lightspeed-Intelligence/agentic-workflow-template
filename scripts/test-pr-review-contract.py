@@ -539,23 +539,51 @@ def test_setup_hook_behavior() -> None:
             assert run_mode("tracked", mode) == 1, mode
             assert run_mode("untracked", mode) == 1, mode
 
-        # 豁免的依据是「基线中已存在的状态条目」，不是「路径名匹配」：以 .trusted 开头的
-        # 路径本身不构成豁免，跟踪文件的改动仍会产生新的 porcelain 行并被拒绝。
+        # 豁免的依据是「基线中已存在的状态条目」，不是「路径名匹配」。两个用例：
         #
-        # 这个用例刻意放在折叠目录之外。真实布局中 .trusted-* 内含嵌套 .git，整个目录折叠
-        # 为一行，目录内的任何改动都不会产生新行——那是 workflow-contracts.md 记录的固有
-        # 限制，不是本断言要验证的性质。把用例放进折叠目录只会测到那条限制。
-        tracked_lookalike = source / ".trusted-sidecar/consumer-owned.txt"
-        tracked_lookalike.parent.mkdir(parents=True, exist_ok=True)
-        tracked_lookalike.write_text("real\n")
-        (source / ".github/setup-trusted-tracked.sh").write_text(
-            "echo polluted >> .trusted-sidecar/consumer-owned.txt\n"
-        )
-        git(source, "add", "-f", ".trusted-sidecar/consumer-owned.txt",
-            ".github/setup-trusted-tracked.sh")
-        git(source, "commit", "-qm", "consumer tracks a .trusted-prefixed path")
-        for mode in ("change", "review"):
-            assert run_mode("trusted-tracked", mode) == 1, (mode, "tracked file must still fail")
+        # 1) 一个 .trusted 前缀的旁路目录，证明前缀本身不构成豁免；
+        # 2) 真正的 .trusted-base 目录内的已跟踪文件——按名字排除会漏掉它，这正是 issue #31
+        #    提醒的副作用。该目录一旦持有索引条目就不再折叠，因此这个用例不会退化成测折叠。
+        # 折叠只在目录不含索引条目时发生，因此这两个用例用一个独立仓库：上面的 fixture 已经
+        # 在 .trusted-base 内建好嵌套 .git 并断言了折叠形态，无法在同一棵树里同时表达两种。
+        with tempfile.TemporaryDirectory(prefix="setup-hook-named-") as named_name:
+            named_ws = Path(named_name)
+            named = init_repo(named_ws / "consumer")
+            (named / ".github").mkdir(parents=True, exist_ok=True)
+            for rel, script in (
+                (".trusted-sidecar/consumer-owned.txt", "setup-trusted-tracked"),
+                (".trusted-base/consumer-owned.txt", "setup-trusted-inside"),
+            ):
+                target = named / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("real\n")
+                (named / f".github/{script}.sh").write_text(f"echo polluted >> {rel}\n")
+            git(named, "add", "-A")
+            git(named, "commit", "-qm", "consumer tracks files under .trusted paths")
+            # 先有索引条目，再制造嵌套 .git：该目录因此不折叠，其中已跟踪文件的改动会产生
+            # ` M` 行。按名字排除 .trusted-base 会漏掉它，这正是 issue #31 提醒的副作用。
+            run(["git", "init", "-q"], cwd=named / ".trusted-base")
+            status = git(named, "status", "--porcelain", "--untracked-files=all")
+            assert "?? .trusted-base/\n" not in status + "\n", status
+
+            def run_named(script: str, mode: str) -> int:
+                scratch = named_ws / "scratch"
+                scratch.mkdir(exist_ok=True)
+                prompt = scratch / "prompt.txt"
+                prompt.write_text("base prompt\n")
+                env = os.environ.copy()
+                env["RUNNER_TEMP"] = str(scratch)
+                code = run(
+                    ["bash", str(hook), f".github/{script}.sh", str(named), str(named),
+                     str(prompt), mode],
+                    env=env, check=False,
+                ).returncode
+                git(named, "checkout", "-q", "--", ".")
+                return code
+
+            for mode in ("change", "review"):
+                assert run_named("setup-trusted-tracked", mode) == 1, (mode, "prefix no exemption")
+                assert run_named("setup-trusted-inside", mode) == 1, (mode, "tracked inside must fail")
 
 
 def test_model_secret_routing(workflow: str, caller: str) -> None:
