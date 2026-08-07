@@ -73,8 +73,8 @@ worktree data, so dependency manifests remain an execution path; the pinned sour
 The step receives no secret because it can export `GITHUB_ENV` to later steps holding the model key.
 
 Runtime failure is non-fatal: exit code and truncated log tail are appended to the prompt as untrusted
-data and the Agent discloses which verification it could not perform. Path-validation failure and, for
-code-writing flows, a dirty worktree are configuration errors that fail the job.
+data and the Agent discloses which verification it could not perform. Path-validation failure and a dirty
+worktree after the hook are configuration errors that fail the job, in every workflow.
 
 ## Invariants
 
@@ -88,9 +88,11 @@ code-writing flows, a dirty worktree are configuration errors that fail the job.
   successful; publisher-only rejection must not suppress fallback.
 - Gitlink add/change/delete and dirty recursive submodule worktrees are never silently truncated into
   a publishable root-repository bundle.
-- Setup-hook artifacts never enter a candidate bundle. `implement` and `update-llmdoc` assert a clean
-  worktree right after the hook, before the Agent runs, because `package-change-result.sh` would
-  otherwise `git add -A` a tracked lockfile change or an unignored artifact into the candidate commit.
+- Setup-hook artifacts never reach an Agent. Every workflow asserts a clean worktree right after the hook
+  and before the Agent runs. In `implement`/`update-llmdoc` residue would otherwise be `git add -A`'d into
+  the candidate commit; in `issue-dispatch` a post-Agent cleanliness assertion would fail both the primary
+  and the fallback at the same point, yielding no answer at all; in `question`/`pr-review` the Agent would
+  analyse a checkout that has drifted from the pinned SHA.
 - Publisher-owned comments are matched only when both `github-actions[bot]` and the `github-actions`
   App identity agree with the stable marker.
 - Workflow YAML, action YAML and tracked Skills are executable contracts; README/design/llmdoc must follow them.

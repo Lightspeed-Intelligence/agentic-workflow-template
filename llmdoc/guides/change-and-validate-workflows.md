@@ -65,8 +65,8 @@ Also:
   while consumer-base and template-policy checkouts use the read-only job token;
 - exercise `review_status` COMPLETE/INCOMPLETE soft-failure fixtures and `extra_allowed_tools` valid/write/traversal/injection fixtures;
 - exercise `setup_script` empty/missing/success/failure fixtures plus absolute, traversal, injection and
-  whitespace path rejection; assert no hook step carries a `secrets.` value; for code-writing flows
-  assert an ignored artifact passes while a tracked-file change or unignored artifact fails;
+  whitespace path rejection; assert no hook step carries a `secrets.` value; in every mode assert an
+  ignored artifact passes while a tracked-file change or unignored artifact fails;
 - initialize contract fixture repositories with `commit.gpgsign=false`: inherited signing configuration
   makes `git commit` block on an interactive key prompt and the harness hangs instead of failing;
 - exercise history-state fixtures for trusted/untrusted author, malformed marker, stale/current/non-ancestor SHA,

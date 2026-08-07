@@ -375,6 +375,10 @@ def test_setup_hook_behavior() -> None:
             target = source / script_path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(body)
+            # 提交脚本本身：洁净检查现在覆盖 review 模式，未跟踪的脚本文件会被算作
+            # 准备脚本弄脏了工作树。真实用法中脚本来自可信 checkout，本就是已跟踪内容。
+            git(source, "add", "-A")
+            git(source, "commit", "-qm", f"add {script_path}")
         prompt = workspace / "prompt.txt"
         prompt.write_text("base prompt\n")
         runner_temp = workspace / "runner"
@@ -446,31 +450,35 @@ def test_setup_hook_behavior() -> None:
         git(source, "add", "-A")
         git(source, "commit", "-qm", "base")
 
-        def run_change(name: str) -> int:
-            prompt = workspace / "prompt.txt"
+        def run_mode(name: str, mode: str) -> int:
+            # prompt 与 RUNNER_TEMP 必须落在仓库之外：真实 runner 上它们在 $RUNNER_TEMP
+            # 里，放进仓库会让洁净检查把测试脚手架本身算作准备脚本的产物。
+            scratch = workspace / "scratch"
+            scratch.mkdir(exist_ok=True)
+            prompt = scratch / "prompt.txt"
             prompt.write_text("base prompt\n")
-            runner_temp = workspace / "runner"
-            runner_temp.mkdir(exist_ok=True)
             env = os.environ.copy()
-            env["RUNNER_TEMP"] = str(runner_temp)
+            env["RUNNER_TEMP"] = str(scratch)
             code = run(
                 ["bash", str(hook), f".github/setup-{name}.sh", str(source), str(source),
-                 str(prompt), "change"],
+                 str(prompt), mode],
                 env=env, check=False,
             ).returncode
             # 复位工作树，让每个用例从同一状态开始。
             git(source, "checkout", "-q", "--", ".")
-            git(source, "clean", "-qfdx")
+            git(source, "clean", "-qfd")
             return code
 
-        # 被 gitignore 覆盖的产物是允许的。
-        assert run_change("ignored") == 0
-
-        # 改动已跟踪文件会被拒绝，避免准备产物进入候选提交。
-        assert run_change("tracked") == 1
-
-        # 产生未被忽略的新文件同样被拒绝。
-        assert run_change("untracked") == 1
+        # 两种模式行为一致。review 模式同样不能放过残留：issue-dispatch 在 Agent 之后
+        # 断言工作树完全干净，残留会让主链路与 fallback 在同一处失败；question 与
+        # pr-review 则会让 Agent 基于已偏离固定 SHA 的 checkout 工作。
+        for mode in ("change", "review"):
+            # 被 gitignore 覆盖的产物是允许的。
+            assert run_mode("ignored", mode) == 0, mode
+            # 改动已跟踪文件会被拒绝。
+            assert run_mode("tracked", mode) == 1, mode
+            # 产生未被忽略的新文件同样被拒绝。
+            assert run_mode("untracked", mode) == 1, mode
 
 
 def test_model_secret_routing(workflow: str, caller: str) -> None:

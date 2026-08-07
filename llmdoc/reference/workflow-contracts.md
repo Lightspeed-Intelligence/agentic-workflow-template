@@ -68,8 +68,9 @@ a wider backstop) with no secret in its environment.
 `pr-review` reads it from the PR base SHA through `.trusted-base`; the other four read it from the
 event-pinned consumer checkout. Runtime failure appends the exit code and truncated log tail to the
 prompt as untrusted data and does not fail the job or change `INCOMPLETE`/`READY` validation.
-Path-validation failure fails the job. `implement` and `update-llmdoc` additionally require a clean
-worktree after the hook and steer the Agent toward `BLOCKED` when preparation prevented verification.
+Path-validation failure fails the job. Every workflow requires a clean worktree after the hook, so setup
+artifacts must be gitignored; `implement` and `update-llmdoc` additionally steer the Agent toward
+`BLOCKED` when preparation prevented verification.
 
 ## Submodules
 
