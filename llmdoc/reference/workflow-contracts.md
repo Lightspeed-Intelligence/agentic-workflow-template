@@ -78,15 +78,23 @@ The baseline is captured only after the hook is known to exist, so a repository 
 empty runs no `git` command at all — otherwise an unrelated unusable gitlink would fail a job that does not
 use the feature.
 
-Known limits, all inherent to `git status` porcelain rather than to the baseline comparison, and all bounded
-by the same trust model as the rest of the hook — owner-maintained configuration, not a security boundary:
+Known limits, all bounded by the same trust model as the rest of the hook — owner-maintained configuration,
+not a security boundary.
+
+Inherent to `git status` porcelain:
 
 - A directory containing a nested `.git` is reported as a single folded entry (`?? .trusted-policy/`).
   Anything the hook adds, deletes or rewrites **inside** such a directory produces no new porcelain line and
   is therefore undetected. This is the live case in `pr-review`, because `actions/checkout` with `path:`
-  creates that nested `.git`.
+  creates that nested `.git`. Folding stops if the directory also holds index entries.
 - A porcelain line does not encode content, so rewriting a file that was already listed — untracked
   individually, or tracked but already modified — yields the same line and is undetected.
+
+Inherent to the baseline comparison itself:
+
+- Only *added* status entries are reported, so a hook that **deletes** an entry present in the baseline is
+  not reported. In a fresh checkout the only such entries are the calling workflow's own directories.
+  Deleting a consumer-**tracked** file still produces a new ` D` line and fails.
 
 What remains guarded: any change that produces a *new* status entry, including modification of a
 consumer-tracked file anywhere in the tree (exemption keys on status lines, not path names).
