@@ -471,8 +471,12 @@ def test_setup_hook_wiring() -> None:
         assert text.count("setup_script:\n        description:") == 1, name
         assert text.count("SETUP_SCRIPT: ${{ inputs.setup_script }}") == 2, name
 
+        # 捕获到下一个步骤（或 job）边界，而不是到第一个空行：YAML 块标量允许内部空行，
+        # `\n\n` 截断会让空行之后的内容逃过本函数的全部断言。
         steps = re.findall(
-            r"      - name: Run repository setup script\n(.*?)\n\n", text, re.S,
+            r"      - name: Run repository setup script\n(.*?)"
+            r"(?=^      - name: |^  [A-Za-z0-9_-]+:|\Z)",
+            text, re.S | re.M,
         )
         assert len(steps) == 2, name
         for step in steps:
@@ -489,7 +493,7 @@ def test_setup_hook_wiring() -> None:
                 r'\s+"\$GITHUB_WORKSPACE/consumer" \\\n'
                 r'\s+"\$GITHUB_WORKSPACE/consumer" \\\n'
                 r'\s+"\$RUNNER_TEMP/prompt\.txt" \\\n'
-                rf'\s+{expected_mode[name]}$',
+                rf'\s+{expected_mode[name]}\s*$',
                 step,
             ), (name, step)
 
@@ -516,6 +520,20 @@ def test_setup_hook_wiring() -> None:
             for agent_step in agent_steps:
                 agent_at = block.index(f"- name: {agent_step}")
                 assert hook_at < agent_at, (name, job, agent_step)
+
+    # 每个运行 hook 的 job 都必须检出脚本所在目录。少写或写错时 CI 仍然通过，但运行时
+    # 找不到脚本：hook 步骤没有 continue-on-error，Agent job 会直接失败，非致命降级设计
+    # 覆盖不到这种情况。
+    for name, path in WORKFLOWS.items():
+        text = path.read_text()
+        hook_jobs = [
+            job for job in re.findall(r"^  ([A-Za-z0-9_-]+):$", text, re.M)
+            if "- name: Run repository setup script" in job_block(text, job)
+        ]
+        assert len(hook_jobs) == 2, (name, hook_jobs)
+        for job in hook_jobs:
+            block = job_block(text, job)
+            assert "            .github/scripts/agentic\n" in block, (name, job)
 
     # 两条写代码链路的提示词都要引导 Agent 在无法验证时选择 BLOCKED，而不是推出未验证
     # 的改动。公开文档同时宣称 implement 与 update-llmdoc 都有这条指引，因此两者都断言。

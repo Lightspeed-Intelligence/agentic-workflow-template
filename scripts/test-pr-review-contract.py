@@ -300,8 +300,12 @@ def test_setup_hook_wiring(workflow: str) -> None:
     assert workflow.count('SETUP_SCRIPT: ${{ inputs.setup_script }}') == 2
     assert workflow.count("timeout-minutes: 15") == 2
 
+    # 必须捕获到下一个步骤（或 job）边界，而不是到第一个空行。YAML 块标量允许内部空行，
+    # 用 `\n\n` 截断会让空行之后的内容逃过本函数的全部断言，例如追加一行把 secret 写入
+    # GITHUB_ENV，或再插一次从 head 工作树读取脚本的 hook 调用。
     steps = re.findall(
-        r"      - name: Run repository setup script\n(.*?)\n\n", workflow, re.S,
+        r"      - name: Run repository setup script\n(.*?)(?=^      - name: |^  [A-Za-z0-9_-]+:|\Z)",
+        workflow, re.S | re.M,
     )
     assert len(steps) == 2, steps
     for step in steps:
@@ -318,11 +322,21 @@ def test_setup_hook_wiring(workflow: str) -> None:
             r'\s+"\$GITHUB_WORKSPACE/\.trusted-base" \\\n'
             r'\s+"\$GITHUB_WORKSPACE" \\\n'
             r'\s+"\$RUNNER_TEMP/review-prompt\.txt" \\\n'
-            r'\s+review$',
+            r'\s+review\s*$',
             step,
         ), step
         # 步骤级兜底必须挂在这个步骤上，而不是文件里任意位置。
         assert "timeout-minutes: 15" in step, step
+
+    # 脚本必须出现在可信策略检出的 sparse-checkout 列表里。少写或写错这一行时 CI 仍然
+    # 通过，但运行时找不到脚本：hook 步骤没有 continue-on-error，Agent job 会直接失败，
+    # 非致命降级设计覆盖不到这种情况，fallback 也会以同样方式失败。
+    assert workflow.count(
+        "sparse-checkout: |\n"
+        "            .claude/skills/pr-review\n"
+        "            .claude/skills/github-comment\n"
+        "            .github/scripts/agentic/run-setup-hook.sh\n"
+    ) == 2
 
     # 位置必须在审查范围冻结之后：diff/commit 列表已写入 RUNNER_TEMP，准备脚本无法
     # 再影响审查哪些改动；同时仍在安装 CLI 之前，它写入的 PATH 对 Agent 有效。
@@ -393,6 +407,9 @@ def test_setup_hook_behavior() -> None:
         for bad_path in (
             "/etc/passwd", "../escape.sh", ".github/../x.sh", ".github/./x.sh",
             ".github//x.sh", "x.sh;whoami", "$(whoami).sh", "a b.sh", ".github/x.sh\nrm -rf /",
+            # 只含换行的用例：上面那个值同时含 `/` 与空格，会被字符集分支拦下，因此
+            # 无法单独证明换行拒绝分支存在。这两个值只违反换行规则。
+            "setup.sh\nsetup.sh", "setup.sh\rsetup.sh",
         ):
             code, prompt = invoke(bad_path, workspace=workspace)
             assert code == 1, bad_path
@@ -552,6 +569,26 @@ def test_trusted_policy_source(workflow: str) -> None:
         # 旧的「步骤级 15 分钟即上限」表述不得残留，否则与自限时模型矛盾。
         assert "fixed 15-minute step timeout" not in text, str(doc.relative_to(ROOT))
         assert "15-minute step, non-fatal" not in text, str(doc.relative_to(ROOT))
+
+    # 步骤级兜底与 job 级超时的数字同样会漂移，一并与 workflow 实际值绑定。
+    step_backstop = re.search(r"^        timeout-minutes: (\d+)$", workflow, re.M)
+    assert step_backstop, "hook 步骤必须声明 timeout-minutes"
+    job_timeout = re.search(r"^    timeout-minutes: (\d+)$", workflow, re.M)
+    assert job_timeout, "reviewer job 必须声明 timeout-minutes"
+    for doc in (
+        ROOT / "README.md",
+        ROOT / "llmdoc/reference/pr-review-contract.md",
+        ROOT / "llmdoc/reference/workflow-contracts.md",
+        ROOT / "llmdoc/architecture/pr-review-trust-boundary.md",
+        ROOT / "llmdoc/architecture/workflow-orchestration.md",
+    ):
+        text = doc.read_text()
+        if "timeout-minutes" in text:
+            assert f"timeout-minutes: {step_backstop.group(1)}" in text, (
+                str(doc.relative_to(ROOT)), step_backstop.group(1),
+            )
+    contract_doc = (ROOT / "llmdoc/reference/pr-review-contract.md").read_text()
+    assert f"{job_timeout.group(1)} minutes" in contract_doc, job_timeout.group(1)
 
     policy_files = run([
         "git", "ls-tree", "-r", "--name-only", policy_sha, "--", ".claude/skills/pr-review",
