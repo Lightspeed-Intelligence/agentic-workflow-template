@@ -550,15 +550,20 @@ def test_trusted_policy_source(workflow: str) -> None:
 
     # 五个 workflow 必须共用同一个版本号。此前两个 harness 各自只读自己那几个 workflow，
     # 没有任何检查会发现 pr-review 被单独重新 pin 到另一个真实 commit（split pin）。
+    # 两种键序都要覆盖：只匹配 repository 在前的写法时，调换 with: 下的键序即可绕过。
+    # 这里不引入 PyYAML，因为两个 harness 目前都只依赖标准库，CI 也不安装额外依赖。
+    template_repo = "repository: Lightspeed-Intelligence/agentic-workflow-template"
     all_refs: set[str] = set()
     for name in (
         "pr-review", "question", "issue-dispatch", "implement", "update-llmdoc",
     ):
         text = (ROOT / f".github/workflows/{name}.yml").read_text()
-        refs = re.findall(
-            r"repository: Lightspeed-Intelligence/agentic-workflow-template\n\s+ref: ([^\s#]+)",
-            text,
-        )
+        refs = [
+            *re.findall(rf"{re.escape(template_repo)}\n\s+ref: ([^\s#]+)", text),
+            *re.findall(rf"ref: ([^\s#]+)\n\s+{re.escape(template_repo)}", text),
+        ]
+        # 每个引用模板仓库的 checkout 都必须带 ref，否则会隐式取默认分支。
+        assert len(refs) == text.count(template_repo), (name, refs)
         assert refs, name
         all_refs.update(refs)
     assert all_refs == {policy_sha}, all_refs

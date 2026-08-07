@@ -108,16 +108,19 @@ First, positions were located with `str.index()` over the entire workflow file. 
 a Codex job and a Claude fallback job with identically named steps, so the search always returned the
 primary job's match and the fallback's ordering was never examined. Fix: slice the job block first.
 
-Second — and this survived the initial fix — the hook position was located with
-`block.index(needle, contract_at)`. Starting the search at `contract_at` means the result can only ever
-be *after* `contract_at`, which is precisely the property being asserted. Moving the hook before input
-freezing made the search skip it entirely and the assertion still passed. Fix: locate each position
-independently from the block start, then compare.
+The positions were also derived from one another: `block.index(needle, contract_at)` starts searching at
+`contract_at`, so the result can only be after it. Within a single job block the hook appears once, so a
+moved hook makes this raise `ValueError` rather than pass — a loud failure, which is why per-job slicing
+alone already closed the gap. The current code still locates each position independently and compares
+absolute offsets, because relying on an exception to enforce an ordering is fragile: it depends on the
+needle being unique inside the block, and a second occurrence would silently restore the blind spot.
 
-Lesson: an assertion that derives one operand from the other cannot test the relation between them.
-When an assertion guards an ordering or containment property, break it on purpose in every direction
-it is supposed to catch. Here that meant four separate mutations (two workflows × primary and fallback);
-the first fix attempt looked correct and still let a landed mutation through.
+Lesson: verify an ordering assertion by breaking it in every direction it should catch, and confirm the
+failure is the one you expect. The mutation surface here is 20 cases — five workflows carry the hook,
+each with a primary and a fallback job, and each job's hook can move to either side of its neighbours —
+not the 4 I first checked. A fix that "looks correct" is not evidence; my own first attempt appeared to
+pass a mutation that had in fact failed to apply, and I initially misattributed that to the derived
+search start.
 
 Corollary: "the harness compares pinned files byte-for-byte, so a stale pin fails CI" was true, but
 nothing compared the five workflows' pins *to each other* — repinning one workflow alone to a different
