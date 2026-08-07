@@ -13,7 +13,8 @@
   `git -C` plus `diff`, `log`, `show`, `status`, `rev-parse`, `merge-base` or `ls-files`.
 - `setup_script` optional repository-relative path of `[A-Za-z0-9._/-]` characters, read from the PR
   base SHA. Empty is a no-op; a missing declared file warns and continues. Runs after review inputs are
-  frozen and before CLI installation, with a fixed 15-minute step timeout and no secret in scope.
+  frozen and before CLI installation, bounded by the script's own 13-minute `timeout` with a step-level
+  `timeout-minutes: 15` backstop, and with no secret in scope.
 - `ANTHROPIC_API_KEY` required; `ANTHROPIC_BASE_URL` optional.
 - `OPENAI_API_KEY` and `OPENAI_BASE_URL` optional. Codex resolves each independently as
   `OPENAI_*` first, then the corresponding `ANTHROPIC_*` value; Claude always uses `ANTHROPIC_*`.

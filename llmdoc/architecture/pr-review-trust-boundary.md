@@ -9,7 +9,7 @@ Allow deep local code analysis while preventing model-driven processes from writ
 ```text
 pull_request event
   -> deterministic preparation: authenticate structured Bot history, select full/incremental range
-  -> optional base-pinned setup_script: 15-minute step, non-fatal, disclosed in the prompt
+  -> optional base-pinned setup_script: self-bounded 13m, non-fatal, disclosed in the prompt
   -> codex_review: read-only token, full local execution, gpt-5.6-sol
   -> on process/schema/soft failure: independent claude_review, read-only token, claude-opus-5
   -> one-day structured artifact

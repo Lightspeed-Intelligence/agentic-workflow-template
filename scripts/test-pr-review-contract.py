@@ -496,14 +496,38 @@ def test_trusted_policy_source(workflow: str) -> None:
 
     # 文档不得复制可能变陈旧的 SHA 字面量。此前 pr-review-contract.md 硬编码了旧的
     # policy SHA，而唯一引用它的测试改为正则提取后，这条字面量失去了任何自动检查。
-    for doc in ("README.md", "docs/code-review-design.md"):
-        assert not re.search(r"\b[0-9a-f]{40}\b", (ROOT / doc).read_text()), doc
+    # 用 glob 覆盖 docs/ 与 llmdoc/ 全部 Markdown，新增文件自动纳入。
+    docs = [ROOT / "README.md", *sorted((ROOT / "docs").rglob("*.md"))]
+    for doc in docs:
+        assert not re.search(r"\b[0-9a-f]{40}\b", doc.read_text()), str(doc.relative_to(ROOT))
     for doc in sorted((ROOT / "llmdoc").rglob("*.md")):
         stale = [
             sha for sha in re.findall(r"\b[0-9a-f]{40}\b", doc.read_text())
             if sha != policy_sha
         ]
         assert not stale, (str(doc.relative_to(ROOT)), stale)
+
+    # 准备脚本的自限时默认值被五处文档引用，必须与脚本实际值一致，否则会像 SHA 字面量
+    # 一样悄悄漂移。
+    hook = (ROOT / ".github/scripts/agentic/run-setup-hook.sh").read_text()
+    default_timeout = re.search(r'\$\{SETUP_HOOK_TIMEOUT:-([0-9]+[smh])\}', hook)
+    assert default_timeout, "run-setup-hook.sh 必须为自限时提供默认值"
+    timeout_value = default_timeout.group(1)
+    minutes = timeout_value.removesuffix("m")
+    for doc in (
+        ROOT / "README.md",
+        ROOT / "llmdoc/reference/pr-review-contract.md",
+        ROOT / "llmdoc/reference/workflow-contracts.md",
+        ROOT / "llmdoc/architecture/pr-review-trust-boundary.md",
+        ROOT / "llmdoc/architecture/workflow-orchestration.md",
+    ):
+        text = doc.read_text()
+        assert f"{minutes}m" in text or f"{minutes}-minute" in text or f"{minutes} 分钟" in text, (
+            str(doc.relative_to(ROOT)), timeout_value,
+        )
+        # 旧的「步骤级 15 分钟即上限」表述不得残留，否则与自限时模型矛盾。
+        assert "fixed 15-minute step timeout" not in text, str(doc.relative_to(ROOT))
+        assert "15-minute step, non-fatal" not in text, str(doc.relative_to(ROOT))
 
     policy_files = run([
         "git", "ls-tree", "-r", "--name-only", policy_sha, "--", ".claude/skills/pr-review",

@@ -75,7 +75,7 @@ make the control flow real.
 ## Keep a derived value in one place
 
 `llmdoc/reference/pr-review-contract.md` duplicated the policy SHA as a literal. Merging the pins
-updated all 21 workflow references but left that literal stale, and the same change had replaced the
+updated all 20 workflow references but left that literal stale, and the same change had replaced the
 one test that hardcoded it with a regex extraction — removing the only thing that would have caught
 the drift. The document now points at the workflow as the source of truth, and a contract assertion
 rejects any 40-character SHA literal in `README.md`/`docs/` or a non-current one anywhere in `llmdoc/`.
