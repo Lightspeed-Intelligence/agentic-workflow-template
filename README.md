@@ -222,7 +222,8 @@ pr-review:
 
   比对基线的做法意味着：workflow 自己在工作区内创建的目录（`pr-review` 的
   `.trusted-base` / `.trusted-policy`）不会被算作你的准备脚本产物，你不需要为它们添加
-  `.gitignore` 条目；但如果你的仓库真的跟踪了这些路径下的文件，改动它们仍会被拒绝。
+  `.gitignore` 条目；但如果你的仓库真的跟踪了这些路径下的文件，改动它们仍会被拒绝——
+  豁免的依据是状态记录，不是路径名。留空 `setup_script` 时不会执行任何 `git` 命令。
 - 准备脚本只在运行 Agent 的 job 中执行，不覆盖校验候选提交的 validator job。因此
   消费仓库可选的 `.github/agentic/validate.sh` 仍然只能使用 runner 预装的工具链。
   这是有意为之：validator 的职责是在未经审查的候选提交上把关，不宜在其中准备环境。

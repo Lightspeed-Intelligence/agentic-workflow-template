@@ -69,10 +69,20 @@ a wider backstop) with no secret in its environment.
 event-pinned consumer checkout. Runtime failure appends the exit code and truncated log tail to the
 prompt as untrusted data and does not fail the job or change `INCOMPLETE`/`READY` validation.
 Path-validation failure fails the job. Every workflow rejects dirty state the hook itself introduced, so
-setup artifacts must be gitignored; the check diffs against a pre-hook baseline, so a calling workflow's
-own directories inside `repo_dir` (`pr-review`'s `.trusted-base`/`.trusted-policy`) are not blamed on the
-hook, while a change to a consumer-tracked file under those same paths still fails. `implement` and
-`update-llmdoc` additionally steer the Agent toward `BLOCKED` when preparation prevented verification.
+setup artifacts must be gitignored. The check diffs `git status` porcelain lines against a baseline taken
+just before the hook runs, so a calling workflow's own directories inside `repo_dir` (`pr-review`'s
+`.trusted-base`/`.trusted-policy`) are not blamed on the hook. Exemption is by status line, not by path
+name: a modification to a consumer-**tracked** file under those same paths still fails.
+
+The baseline is captured only after the hook is known to exist, so a repository that leaves `setup_script`
+empty runs no `git` command at all — otherwise an unrelated unusable gitlink would fail a job that does not
+use the feature.
+
+Known limit: an already-untracked file's porcelain line does not encode content, so a hook that rewrites a
+file which was already untracked before it ran is not detected. That is a property of `git status`, not of
+the baseline comparison, and it is bounded by the same trust model as the rest of the hook — owner-maintained
+configuration, not a security boundary. `implement` and `update-llmdoc` additionally steer the Agent toward
+`BLOCKED` when preparation prevented verification.
 
 ## Submodules
 

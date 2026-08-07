@@ -168,6 +168,28 @@ Also worth noting: the error text said "your setup script's artifacts must be gi
 a workflow-owned directory. A hardcoded diagnosis that names a cause it has not established sends every
 reader down the wrong path. The message is now only produced for state the hook actually introduced.
 
+### A baseline must be captured no earlier than the action it measures
+
+The first fix put the baseline capture at the top of the script, before the `setup_script`-is-empty
+short-circuit. That made every workflow run `git status` and `submodule foreach` even when the feature was
+switched off — and a repository with an unusable gitlink (a `.gitmodules` entry missing for a checked-out
+submodule path) then exited 128. A repository not using the feature at all would have started failing.
+
+Lesson: a "before" measurement belongs immediately before the thing it measures, past every early return.
+Placing it at the top of the script looks harmless because the value is only consumed later, but the
+*collection* has side effects and failure modes of its own.
+
+### A reset in a shared fixture helper can silently disarm later cases
+
+The regression fixture planted the workflow-owned directories once, then ran each case through a helper that
+ended with `git clean -qfd`. That deleted the planted directories, so only the very first case saw them —
+and the `review` branch, the actual victim of the bug, was never guarded. Mutating the implementation to
+skip the baseline in `review` mode passed both harnesses.
+
+Lesson: when a fixture helper resets state between cases, anything the test *depends on* must be re-planted
+inside the helper, not set up once outside it. Verify by mutating the specific branch each case claims to
+cover, not just the first one.
+
 ## Fixture hazards found while writing the harness
 
 - Temporary git repositories inherit the author's `commit.gpgsign`/`gpg.format`. With SSH signing,

@@ -450,7 +450,16 @@ def test_setup_hook_behavior() -> None:
         git(source, "add", "-A")
         git(source, "commit", "-qm", "base")
 
+        # 由调用方登记「workflow 自己创建的目录」。复位会用 git clean 删掉未跟踪内容，
+        # 因此每次运行前都要重新预置，否则只有第一次调用能看到它们，后续用例（包括
+        # review 模式那一支）实际上没有被守护。
+        workflow_owned: dict[str, str] = {}
+
         def run_mode(name: str, mode: str) -> int:
+            for path, content in workflow_owned.items():
+                target = source / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content)
             # prompt 与 RUNNER_TEMP 必须落在仓库之外：真实 runner 上它们在 $RUNNER_TEMP
             # 里，放进仓库会让洁净检查把测试脚手架本身算作准备脚本的产物。
             scratch = workspace / "scratch"
@@ -484,10 +493,10 @@ def test_setup_hook_behavior() -> None:
         # $GITHUB_WORKSPACE，又以同一目录作为 repo_dir。这些目录在准备脚本运行前就存在，
         # 属于 workflow 实现细节，不得被算作准备脚本的产物——否则只要声明 setup_script
         # 就必然失败，且报错指向错误的原因。
-        for path in (".trusted-base/.github/x", ".trusted-policy/.claude/marker"):
-            target = source / path
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text("workflow-owned\n")
+        workflow_owned.update({
+            ".trusted-base/.github/x": "workflow-owned\n",
+            ".trusted-policy/.claude/marker": "workflow-owned\n",
+        })
         for mode in ("change", "review"):
             assert run_mode("ignored", mode) == 0, (mode, "trusted dirs must not be blamed")
             # 真实污染仍须被拒绝，预存的未跟踪目录不得成为普遍豁免。

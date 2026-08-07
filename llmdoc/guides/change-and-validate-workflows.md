@@ -158,6 +158,12 @@ repeatedly clicking **Re-run jobs** cannot validate the newly merged workflow.
   never enables the option, every local run and every self-review exercises the disabled branch; the fixture
   must reproduce the caller's directory layout, including any directory the workflow creates inside the path
   it passes as `repo_dir`.
+- Collecting a "before" baseline earlier than the action it measures. Put it past every early return: the
+  collection itself has side effects and failure modes, so running it when the feature is disabled can fail
+  a job that does not use the feature.
+- Resetting state in a shared fixture helper without re-planting what the test depends on. Anything cleaned
+  between cases must be re-created inside the helper, or only the first case is actually covered — verify by
+  mutating each branch the cases claim to cover, not just the first.
 - Letting a shared script encode a specific caller's path conventions. Compare against a pre-action baseline
   and report only what the action added, rather than exempting known paths by name — name-based exemption
   also hides real changes to consumer-tracked files under those names.
