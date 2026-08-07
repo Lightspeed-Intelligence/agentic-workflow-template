@@ -17,6 +17,11 @@
   scoped credential interface for private dependencies is still undesigned.
 - Setup-hook caching is undefined. Codex and Claude run on separate runners, so a consumer with a slow
   toolchain pays the preparation cost twice within the 45-minute reviewer budget.
+- No offline fixture exercises submodule dirtiness for the setup hook's clean-worktree assertion. The
+  contract harnesses would catch a change to `run-setup-hook.sh` that did not advance the runtime pin,
+  but not a reverted submodule-dirty definition committed together with a pin advance. Building such a
+  fixture needs a nested-submodule scratch repository; until then the alignment with
+  `package-change-result.sh` rests on review rather than automation.
 - Local independent closure environments do not currently provide `actionlint`. The tracked contract
   harness parses YAML and syntax-checks embedded shell, but does not replace actionlint's expression
   and GitHub Actions semantic checks.
