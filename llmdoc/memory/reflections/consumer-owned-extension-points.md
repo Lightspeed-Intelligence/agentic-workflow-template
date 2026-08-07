@@ -99,6 +99,31 @@ misleading "cross-repository changes unsupported" `BLOCKED` instead of "your set
 worktree". No safety invariant broke, but the diagnostic was wrong. Two checks guarding the same
 invariant should share one definition of dirty.
 
+## An ordering assertion can be structurally incapable of failing
+
+The step-ordering checks for this hook were vacuous in two independent ways, and both passed review
+until a mutation test proved otherwise.
+
+First, positions were located with `str.index()` over the entire workflow file. Every workflow here has
+a Codex job and a Claude fallback job with identically named steps, so the search always returned the
+primary job's match and the fallback's ordering was never examined. Fix: slice the job block first.
+
+Second — and this survived the initial fix — the hook position was located with
+`block.index(needle, contract_at)`. Starting the search at `contract_at` means the result can only ever
+be *after* `contract_at`, which is precisely the property being asserted. Moving the hook before input
+freezing made the search skip it entirely and the assertion still passed. Fix: locate each position
+independently from the block start, then compare.
+
+Lesson: an assertion that derives one operand from the other cannot test the relation between them.
+When an assertion guards an ordering or containment property, break it on purpose in every direction
+it is supposed to catch. Here that meant four separate mutations (two workflows × primary and fallback);
+the first fix attempt looked correct and still let a landed mutation through.
+
+Corollary: "the harness compares pinned files byte-for-byte, so a stale pin fails CI" was true, but
+nothing compared the five workflows' pins *to each other* — repinning one workflow alone to a different
+real commit passed. A claim about a cross-file invariant needs a check that actually reads across those
+files.
+
 ## Fixture hazards found while writing the harness
 
 - Temporary git repositories inherit the author's `commit.gpgsign`/`gpg.format`. With SSH signing,

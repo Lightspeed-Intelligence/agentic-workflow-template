@@ -145,6 +145,13 @@ repeatedly clicking **Re-run jobs** cannot validate the newly merged workflow.
   pattern without checking what that literal was incidentally protecting.
 - Asserting on one workflow when the public contract claims the behavior for several.
 - Guarding one invariant with two checks that define "dirty" differently.
+- Locating a step position with `str.index` over a whole workflow file when Codex and Claude jobs share
+  step names: the search always returns the primary job's match and the fallback is never checked.
+- Deriving one operand of an ordering assertion from the other, such as
+  `block.index(hook, prepare_at)`. The search start already guarantees the asserted relation, so the
+  check cannot fail. Locate each position independently, then compare.
+- Claiming a cross-file invariant (for example "no split pin") without a check that reads across those
+  files. Verify each ordering or containment assertion by breaking it in every direction it should catch.
 - Describing a base-pinned script as preventing PR-driven code execution. The script is pinned but its
   input is not: dependency manifests from the working tree still execute during installation.
 - Resolving a hook path relative to the caller's directory when the runner will `cd` elsewhere before
