@@ -44,7 +44,11 @@ worktree_status() {
 # 又以同一个目录作为 repo_dir。这些目录属于 workflow 的实现细节，在准备脚本运行前就
 # 已存在，不该被算作「准备脚本弄脏了工作树」。只比较基线之后新增的条目，因此不必让
 # 这个共享脚本知道任何调用方的路径约定。
-baseline_status=$(worktree_status)
+# 基线在确认要执行准备脚本之后才采集，见下方 script_path 的空值短路。未声明 setup_script
+# 时不得执行任何 git 命令：消费仓库可能存在无法遍历的 gitlink（例如 .gitmodules 缺少条目
+# 的未初始化 submodule），那会让 submodule foreach 以 128 退出，把「本仓库根本没用这个
+# 特性」变成 job 失败。
+baseline_status=""
 
 # 所有模式都要求准备脚本执行后不新增脏状态。
 #
@@ -104,6 +108,9 @@ if [[ ! -f "$hook" ]]; then
 fi
 
 echo "::notice::执行环境准备脚本 $script_path"
+# 只在真正要执行脚本时采集基线：空输入与文件缺失两条路径都已提前返回，因此不会在
+# 「未使用该特性」的仓库上运行任何 git 命令。
+baseline_status=$(worktree_status)
 log="${RUNNER_TEMP:-/tmp}/setup-hook.log"
 hook_status=0
 # 用 timeout 自行限时，而不是只依赖步骤级 timeout-minutes。步骤级超时由 runner 直接
