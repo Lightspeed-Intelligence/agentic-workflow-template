@@ -12,6 +12,10 @@ on:
         description: "是否发送飞书通知"
         type: boolean
         default: true
+      setup_script:
+        description: "消费仓库环境准备脚本的相对路径，从事件固定的消费者 checkout 读取；留空则不执行。执行失败不终止任务，Agent 会披露受限的验证"
+        type: string
+        default: ""
     secrets:
       ANTHROPIC_API_KEY:
         required: true
@@ -105,7 +109,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 6113198d02f1982d9c424eb25644732c00534632
+          ref: 902fff3ebc8b39650604ddd68d4eea35b36815ec
           path: runtime
           sparse-checkout: |
             .github/actions/run-agent
@@ -148,6 +152,19 @@ jobs:
           最终只输出符合 JSON Schema 的对象。核心仓库或问题输入不可访问时输出 INCOMPLETE；否则输出 COMPLETE。
           代码链接必须使用 task.json 中的 repository 和完整 source_sha。
           PROMPT
+
+      # 任务输入已冻结，准备脚本只影响 Agent 可用的验证工具链。
+      - name: Run repository setup script
+        timeout-minutes: 15
+        env:
+          SETUP_SCRIPT: ${{ inputs.setup_script }}
+        run: |
+          bash runtime/.github/scripts/agentic/run-setup-hook.sh \
+            "$SETUP_SCRIPT" \
+            "$GITHUB_WORKSPACE/consumer" \
+            "$GITHUB_WORKSPACE/consumer" \
+            "$RUNNER_TEMP/prompt.txt" \
+            review
 
       - name: Answer with Codex
         uses: ./runtime/.github/actions/run-agent
@@ -200,7 +217,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 6113198d02f1982d9c424eb25644732c00534632
+          ref: 902fff3ebc8b39650604ddd68d4eea35b36815ec
           path: runtime
           sparse-checkout: |
             .github/actions/run-agent
@@ -243,6 +260,19 @@ jobs:
           最终只输出符合 JSON Schema 的对象。核心仓库或问题输入不可访问时输出 INCOMPLETE；否则输出 COMPLETE。
           代码链接必须使用 task.json 中的 repository 和完整 source_sha。
           PROMPT
+
+      # 与 Codex job 同一处理：输入已冻结，准备脚本只影响验证工具链。
+      - name: Run repository setup script
+        timeout-minutes: 15
+        env:
+          SETUP_SCRIPT: ${{ inputs.setup_script }}
+        run: |
+          bash runtime/.github/scripts/agentic/run-setup-hook.sh \
+            "$SETUP_SCRIPT" \
+            "$GITHUB_WORKSPACE/consumer" \
+            "$GITHUB_WORKSPACE/consumer" \
+            "$RUNNER_TEMP/prompt.txt" \
+            review
 
       - name: Answer with Claude Code
         uses: ./runtime/.github/actions/run-agent
@@ -375,7 +405,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 6113198d02f1982d9c424eb25644732c00534632
+          ref: 902fff3ebc8b39650604ddd68d4eea35b36815ec
           path: runtime
           sparse-checkout: .github/actions/feishu-notify
           sparse-checkout-cone-mode: false

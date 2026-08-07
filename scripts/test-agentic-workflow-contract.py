@@ -457,6 +457,45 @@ def test_closes_is_publisher_owned() -> None:
     assert publisher.count("Closes #%s") == 1
 
 
+def test_setup_hook_wiring() -> None:
+    # 写代码链路必须用 change 模式，它会在准备脚本之后强制工作树洁净，避免准备产物
+    # 被 package-change-result.sh 的 git add -A 静默打包进候选提交。
+    expected_mode = {
+        "question": "review",
+        "issue-dispatch": "review",
+        "implement": "change",
+        "update-llmdoc": "change",
+    }
+    for name, path in WORKFLOWS.items():
+        text = path.read_text()
+        assert text.count("setup_script:\n        description:") == 1, name
+        assert text.count("SETUP_SCRIPT: ${{ inputs.setup_script }}") == 2, name
+
+        steps = re.findall(
+            r"      - name: Run repository setup script\n(.*?)\n\n", text, re.S,
+        )
+        assert len(steps) == 2, name
+        for step in steps:
+            # 准备脚本不得收到任何 secret：它能写 GITHUB_ENV，从而把凭据泄漏给持有
+            # 模型密钥的后续步骤，破坏「Agent 进程不接收 GitHub/PAT 凭据」不变量。
+            assert "secrets." not in step, (name, step)
+            assert "timeout-minutes: 15" in step, name
+            assert "runtime/.github/scripts/agentic/run-setup-hook.sh" in step, name
+            assert '"$GITHUB_WORKSPACE/consumer"' in step, name
+            assert step.rstrip().endswith(expected_mode[name]), (name, step)
+
+        # 位置必须在任务输入冻结之后、Agent 启动之前。
+        for agent_step in re.findall(r"      - name: ((?:Answer|Analyze|Implement|Update llmdoc) with [^\n]+)", text):
+            contract_at = text.index("- name: Prepare")
+            hook_at = text.index("- name: Run repository setup script", contract_at)
+            agent_at = text.index(f"- name: {agent_step}")
+            assert contract_at < hook_at < agent_at, (name, agent_step)
+
+    # 写代码链路的提示词要引导 Agent 在无法验证时选择 BLOCKED，而不是推出未验证的改动。
+    implement = WORKFLOWS["implement"].read_text()
+    assert implement.count("倾向输出 BLOCKED") == 2
+
+
 def test_runtime_is_immutable() -> None:
     all_refs: set[str] = set()
     for path in WORKFLOWS.values():
@@ -501,6 +540,7 @@ def main() -> None:
     test_untrusted_text_is_not_shell_source()
     test_change_artifact_scripts()
     test_closes_is_publisher_owned()
+    test_setup_hook_wiring()
     test_runtime_is_immutable()
     print("agentic workflow contract fixtures passed")
 

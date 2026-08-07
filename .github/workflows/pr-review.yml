@@ -15,6 +15,10 @@ on:
         description: "Claude fallback 的额外只读 Git 工具模式（逗号分隔），仅接受 Bash(git -C <path> <read-only-subcommand>:*)；这是仓库特定工具提示，不是权限安全边界"
         type: string
         default: ""
+      setup_script:
+        description: "消费仓库环境准备脚本的相对路径，从 PR base commit 读取；留空则不执行。执行失败不终止审查，Agent 会披露受限的验证"
+        type: string
+        default: ""
     secrets:
       ANTHROPIC_API_KEY:
         required: true
@@ -61,25 +65,28 @@ jobs:
           rm -rf -- .trusted-base .trusted-policy
           mkdir -p -- .trusted-base .trusted-policy
 
-      - name: Checkout trusted history script from base commit
+      - name: Checkout trusted base-pinned scripts from base commit
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: .trusted-base
-          sparse-checkout: .github/scripts/pr-review/prepare-review-history.sh
+          sparse-checkout: |
+            .github/scripts/pr-review/prepare-review-history.sh
+            ${{ inputs.setup_script }}
           sparse-checkout-cone-mode: false
           persist-credentials: false
           token: ${{ github.token }}
 
-      - name: Checkout trusted review policy from template revision
+      - name: Checkout trusted review policy and runtime from template revision
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: e00fbc64c624c15f89a037bee7011d98693c3406
+          ref: 902fff3ebc8b39650604ddd68d4eea35b36815ec
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review
             .claude/skills/github-comment
+            .github/scripts/agentic/run-setup-hook.sh
           sparse-checkout-cone-mode: false
           persist-credentials: false
           token: ${{ github.token }}
@@ -197,6 +204,20 @@ jobs:
           - 代码链接必须使用完整 head commit SHA，不得使用分支名
           PROMPT_EOF
 
+      # 审查范围已冻结到 RUNNER_TEMP，准备脚本无法再影响审查哪些改动，只能影响
+      # 用什么工具验证。位置仍在安装 CLI 之前，因此它写入的 PATH 对 Agent 有效。
+      - name: Run repository setup script
+        timeout-minutes: 15
+        env:
+          SETUP_SCRIPT: ${{ inputs.setup_script }}
+        run: |
+          bash "$GITHUB_WORKSPACE/.trusted-policy/.github/scripts/agentic/run-setup-hook.sh" \
+            "$SETUP_SCRIPT" \
+            "$GITHUB_WORKSPACE/.trusted-base" \
+            "$GITHUB_WORKSPACE" \
+            "$RUNNER_TEMP/review-prompt.txt" \
+            review
+
       - name: Install pinned Codex CLI without lifecycle scripts
         run: |
           CODEX_INSTALL_DIR="$RUNNER_TEMP/codex-0.145.0"
@@ -299,25 +320,28 @@ jobs:
           rm -rf -- .trusted-base .trusted-policy
           mkdir -p -- .trusted-base .trusted-policy
 
-      - name: Checkout trusted history script from base commit
+      - name: Checkout trusted base-pinned scripts from base commit
         uses: actions/checkout@v5
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: .trusted-base
-          sparse-checkout: .github/scripts/pr-review/prepare-review-history.sh
+          sparse-checkout: |
+            .github/scripts/pr-review/prepare-review-history.sh
+            ${{ inputs.setup_script }}
           sparse-checkout-cone-mode: false
           persist-credentials: false
           token: ${{ github.token }}
 
-      - name: Checkout trusted review policy from template revision
+      - name: Checkout trusted review policy and runtime from template revision
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: e00fbc64c624c15f89a037bee7011d98693c3406
+          ref: 902fff3ebc8b39650604ddd68d4eea35b36815ec
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review
             .claude/skills/github-comment
+            .github/scripts/agentic/run-setup-hook.sh
           sparse-checkout-cone-mode: false
           persist-credentials: false
           token: ${{ github.token }}
@@ -434,6 +458,19 @@ jobs:
           - APPROVE 仅当三个问题计数均为 0；critical_count 或 important_count 非 0 时必须 REQUEST_CHANGES
           - 代码链接必须使用完整 head commit SHA，不得使用分支名
           PROMPT_EOF
+
+      # 与 Codex job 同一处理：范围已冻结，准备脚本只影响验证工具链。
+      - name: Run repository setup script
+        timeout-minutes: 15
+        env:
+          SETUP_SCRIPT: ${{ inputs.setup_script }}
+        run: |
+          bash "$GITHUB_WORKSPACE/.trusted-policy/.github/scripts/agentic/run-setup-hook.sh" \
+            "$SETUP_SCRIPT" \
+            "$GITHUB_WORKSPACE/.trusted-base" \
+            "$GITHUB_WORKSPACE" \
+            "$RUNNER_TEMP/review-prompt.txt" \
+            review
 
       - name: Install pinned Claude Code CLI without lifecycle scripts
         run: |

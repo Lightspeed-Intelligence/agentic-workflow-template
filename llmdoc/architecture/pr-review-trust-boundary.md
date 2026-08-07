@@ -9,6 +9,7 @@ Allow deep local code analysis while preventing model-driven processes from writ
 ```text
 pull_request event
   -> deterministic preparation: authenticate structured Bot history, select full/incremental range
+  -> optional base-pinned setup_script: 15-minute step, non-fatal, disclosed in the prompt
   -> codex_review: read-only token, full local execution, gpt-5.6-sol
   -> on process/schema/soft failure: independent claude_review, read-only token, claude-opus-5
   -> one-day structured artifact
@@ -18,13 +19,20 @@ pull_request event
 
 ## Trust Classes
 
-- Trusted reviewer policy: immutable template-repository revision checkout of the complete single-file
-  `pr-review/SKILL.md` and `github-comment/SKILL.md` into sanitized `.trusted-policy`.
+- Trusted reviewer policy and shared runtime: immutable template-repository revision checkout of the
+  complete single-file `pr-review/SKILL.md`, `github-comment/SKILL.md` and
+  `.github/scripts/agentic/run-setup-hook.sh` into sanitized `.trusted-policy`. This revision is the
+  same single runtime pin the four agentic workflows use.
 - Consumer repositories do not need to copy template-owned reviewer policy files. Their exact base-SHA
-  checkout in `.trusted-base` supplies only the optional history-preparation script.
+  checkout in `.trusted-base` supplies only the optional history-preparation and environment-setup
+  scripts.
 - History-preparation code comes only from the consumer base-SHA checkout. If the script is absent from
   base, no PR-head preparation code runs; deterministic workflow commands select a complete
   `base...head` review without historical state.
+- Owner-maintained environment setup: the optional `setup_script` is consumer-owned executable code
+  read from the base SHA. It runs as a distinct step and may therefore write `GITHUB_ENV` and
+  `GITHUB_PATH`, which later steps holding the model key inherit. Treat it as trusted configuration
+  the repository owner maintains deliberately, not as a sandboxed input. It receives no secret.
 - Reviewed/untrusted data: PR metadata, commits, full head checkout, docs, selected diff and historical comment body.
 - Trusted control data: publisher-generated state marker from the latest `github-actions` App comment,
   accepted only after schema, count, SHA and ancestry validation by the deterministic preparation step.
@@ -55,6 +63,10 @@ permission prompts. These flags are not the GitHub boundary; job/token/process i
 subcommands. It is a Claude CLI tool hint for monorepos/submodules, not enforcement: Claude already
 has full local access and the input cannot grant GitHub credentials.
 
+`setup_script` accepts only a normalized repository-relative path of `[A-Za-z0-9._/-]` characters.
+The value reaches shell through `env:` and is never interpolated into shell source. Validation failure
+is a configuration error and fails the job; runtime failure is an environment condition and does not.
+
 ## Review and Artifact Invariants
 
 - Default to the complete event-pinned `base.sha...head.sha` diff. Use `cutoff..head` only when the
@@ -77,13 +89,21 @@ has full local access and the input cannot grant GitHub credentials.
   repository control-plane convention, not cryptographic provenance. Strict marker/schema/ancestry
   validation and full-review fallback limit this residual risk.
 - Schema and validation logic are duplicated across reviewer/publisher blocks and must be changed together.
-- The immutable policy SHA is manually advanced. Policy source edits do not affect runtime until the
-  reusable workflow deliberately pins a revision containing them.
+- The single runtime SHA is manually advanced. Policy or shared-script edits do not affect runtime until
+  the reusable workflows deliberately pin a revision containing them. Both contract harnesses now compare
+  every pinned path byte-for-byte with the working tree, so a stale or split pin fails CI.
+- A base-pinned `setup_script` blocks the current PR from editing the script itself, but the script still
+  reads PR-head data: `pip install -r requirements.txt` executes a dependency's `setup.py` and `mvn`
+  executes the head `pom.xml`. The pinned source removes one direct injection path; it is not a boundary.
+- `setup_script` failure is deliberately non-fatal so a missing runtime degrades disclosure instead of
+  producing no review at all. A reviewer therefore may report on a partially prepared environment; the
+  15-minute step timeout leaves already-written `PATH`/env values and half-installed dependencies in place.
 
 ## Sources of Truth
 
 - `.github/workflows/pr-review.yml`: executable ordering, permissions, credentials and validation.
 - `.github/scripts/pr-review/prepare-review-history.sh`: base-pinned history authentication and range selection.
+- `.github/scripts/agentic/run-setup-hook.sh`: path validation, execution, disclosure and worktree assertion.
 - `scripts/test-pr-review-contract.py`: tracked offline truth-table fixtures run by CI.
 - `.github/workflows/ci.yml`: local trigger and secret forwarding.
 - `.claude/skills/pr-review/SKILL.md`: complete policy authoring source; runtime uses the exact revision pinned by the workflow.

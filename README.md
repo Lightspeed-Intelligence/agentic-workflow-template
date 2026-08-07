@@ -168,7 +168,53 @@ inputs:
   use_feishu_notify: true
   # 可选：Claude fallback 的仓库特定只读 Git 工具模式；不得放行 git -C <path>:*。
   extra_allowed_tools: 'Bash(git -C tipsy-app diff:*),Bash(git -C tipsy-app log:*)'
+
+# 五个 workflow 都接受可选的环境准备脚本；留空则不执行。
+inputs:
+  setup_script: .github/pr-review-setup.sh
 ```
+
+### 环境准备脚本
+
+Agent 运行在 `ubuntu-latest` 上，只有 runner 预装的工具链。项目若需要特定 JDK 版本、
+Python 依赖或预构建的上游产物，可以声明一个准备脚本，让 Agent 具备执行项目自身编译
+与测试的能力。
+
+```yaml
+pr-review:
+  uses: Lightspeed-Intelligence/agentic-workflow-template/.github/workflows/pr-review.yml@main
+  with:
+    setup_script: .github/pr-review-setup.sh
+  secrets:
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+五个 workflow 各有一个同名 `setup_script` 输入，可以指向同一个脚本，也可以为分析类
+任务指向更轻量的脚本。行为分三种情况：留空时不执行任何内容；声明了路径但可信来源中
+没有该文件时打警告后继续；文件存在时执行它。
+
+脚本的读取来源是可信的：`pr-review` 从 PR 的 base commit 读取，其余四个从事件已固定
+的消费者 checkout 读取。这样当前 PR 无法通过修改脚本本身影响准备过程。但脚本读取的
+数据仍来自被审查或被修改的工作树——`pip install -r requirements.txt` 会执行依赖包
+自带的 `setup.py`，`mvn` 会执行工作树里的 `pom.xml`。因此这个来源限制只阻断了一类
+直接注入，**不构成安全边界**；真正的边界仍是 Agent job 的只读 token 和不向 Agent
+进程注入 GitHub/PAT 凭据。
+
+准备脚本本身不接收任何 secret。需要认证才能访问的私有包索引目前不支持。
+
+其他约束：
+
+- 路径必须是 `[A-Za-z0-9._/-]` 组成的规范化仓库相对路径。绝对路径、`..`、`./`、
+  `//` 和换行符都会让 job 失败，这属于配置错误，应当立刻暴露。
+- 步骤超时固定 15 分钟。超时后已写入的 `PATH`、环境变量和已装好的部分依赖仍然保留，
+  Agent 会收到「准备未完成」的说明。
+- 执行失败不终止任务。退出码和日志末尾会作为不可信数据交给 Agent，由它在结论中说明
+  哪些验证没能进行。`review_status=INCOMPLETE` 的判定标准不变，环境受限不足以单独
+  触发它。
+- `implement` 与 `update-llmdoc` 会在准备脚本执行后要求工作树保持洁净，因为这两个
+  workflow 会把工作树打包成候选提交。**准备脚本的产物必须被 `.gitignore` 覆盖**，
+  否则 job 失败。这两个 workflow 还会引导 Agent 在无法验证改动时输出 `BLOCKED`，
+  而不是提交未经验证的代码。
 
 四个 Issue/文档 workflow 与 PR 审查都优先使用 Codex + GPT-5.6-sol。进程失败、schema
 失败或结构化失败状态会在全新 runner 中启动 Claude Code + `claude-opus-5` fallback。
@@ -187,7 +233,14 @@ PR 审查评论同样由单独的发布 job 校验结构化结果后代发。Cod
 
 PR 审查规范由 reusable workflow 所在的 template 仓库以固定 commit 提供；
 调用方仓库无需复制 reviewer policy。完整审查规范集中在单个 `pr-review/SKILL.md`
-中；调用方 base checkout 只用于获取可选的历史审查准备脚本，缺失时安全降级为完整审查。
+中；调用方 base checkout 只用于获取可选的历史审查准备脚本和环境准备脚本，
+缺失时分别安全降级为完整审查和不执行准备。
+
+五个 workflow 的审查规范、Skill、共享脚本、runner 与 publisher 都来自同一个模板
+commit。这个固定版本号是手工推进的，发布分两步：先提交运行时字节，再把所有 workflow
+的引用推进到该 commit。`scripts/test-agentic-workflow-contract.py` 与
+`scripts/test-pr-review-contract.py` 会逐字节比对每个被引用的路径与当前工作树，
+因此陈旧或分裂的版本号无法通过 CI。
 
 每次 Agent 启动前，确定性准备步骤会使用 job 的只读 token 读取最新一条由
 `github-actions` App 发布、且带有 publisher 生成的结构化状态标记的历史 review。
@@ -222,9 +275,12 @@ Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有
 │   │   ├── question.yml
 │   │   ├── update-llmdoc.yml
 │   │   └── pr-review.yml
-│   └── actions/
-│       ├── run-agent/       # 固定版本 Codex / Claude Code runner
-│       └── feishu-notify/   # 飞书通知 Action
+│   ├── actions/
+│   │   ├── run-agent/       # 固定版本 Codex / Claude Code runner
+│   │   └── feishu-notify/   # 飞书通知 Action
+│   └── scripts/             # 随固定版本分发的共享运行时脚本
+│       ├── agentic/         # 结果打包/校验/发布、环境准备脚本执行器
+│       └── pr-review/       # 历史审查认证与范围选择
 ├── .claude/
 │   └── skills/              # Claude Skills
 │       ├── github-comment/  # 基础规范

@@ -12,6 +12,10 @@ on:
         description: "是否发送飞书通知"
         type: boolean
         default: true
+      setup_script:
+        description: "消费仓库环境准备脚本的相对路径，从事件固定的消费者 checkout 读取；留空则不执行。其产物必须被 .gitignore 覆盖，否则 job 失败"
+        type: string
+        default: ""
     secrets:
       ANTHROPIC_API_KEY:
         required: true
@@ -116,7 +120,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 6113198d02f1982d9c424eb25644732c00534632
+          ref: 902fff3ebc8b39650604ddd68d4eea35b36815ec
           path: runtime
           sparse-checkout: |
             .github/actions/run-agent
@@ -163,8 +167,25 @@ jobs:
 
           最终只输出符合 JSON Schema 的对象。实现完成且有改动时为 READY；任务已满足为 NO_CHANGES；
           需要人工决策时为 BLOCKED；核心输入不可访问或无法有意义地尝试时为 INCOMPLETE。
+          若提示词末尾说明环境准备未完成，且改动性质要求编译或测试才能确认正确性，倾向输出 BLOCKED
+          并说明缺失的验证，不要把未经验证的改动作为 READY 提交；纯文档或注释改动不受此限。
           pr_body 必须准确总结变更和验证；publisher 会确定分支并追加 Closes 语句。
           PROMPT
+
+      # change 模式在准备脚本执行后强制工作树洁净：此时工作树应仍是 base checkout
+      # 的干净状态，准备产物若留在这里会被 package-change-result.sh 的 git add -A
+      # 静默打包进候选提交。
+      - name: Run repository setup script
+        timeout-minutes: 15
+        env:
+          SETUP_SCRIPT: ${{ inputs.setup_script }}
+        run: |
+          bash runtime/.github/scripts/agentic/run-setup-hook.sh \
+            "$SETUP_SCRIPT" \
+            "$GITHUB_WORKSPACE/consumer" \
+            "$GITHUB_WORKSPACE/consumer" \
+            "$RUNNER_TEMP/prompt.txt" \
+            change
 
       - name: Implement with Codex
         uses: ./runtime/.github/actions/run-agent
@@ -222,7 +243,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 6113198d02f1982d9c424eb25644732c00534632
+          ref: 902fff3ebc8b39650604ddd68d4eea35b36815ec
           path: runtime
           sparse-checkout: .github/scripts/agentic
           sparse-checkout-cone-mode: false
@@ -272,7 +293,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 6113198d02f1982d9c424eb25644732c00534632
+          ref: 902fff3ebc8b39650604ddd68d4eea35b36815ec
           path: runtime
           sparse-checkout: |
             .github/actions/run-agent
@@ -316,7 +337,22 @@ jobs:
           完整阅读消费仓库的 llmdoc、AGENTS.md 和相关代码。可以编辑工作树并运行测试，但不得 commit、
           push、调用 GitHub API、创建 PR 或发表评论。submodule 内需要新提交时输出 BLOCKED。
           最终只输出符合 JSON Schema 的对象；READY、NO_CHANGES、BLOCKED、INCOMPLETE 语义同可信规范。
+          若提示词末尾说明环境准备未完成，且改动性质要求编译或测试才能确认正确性，倾向输出 BLOCKED
+          并说明缺失的验证，不要把未经验证的改动作为 READY 提交；纯文档或注释改动不受此限。
           PROMPT
+
+      # 与 Codex job 同一处理，含准备后工作树洁净检查。
+      - name: Run repository setup script
+        timeout-minutes: 15
+        env:
+          SETUP_SCRIPT: ${{ inputs.setup_script }}
+        run: |
+          bash runtime/.github/scripts/agentic/run-setup-hook.sh \
+            "$SETUP_SCRIPT" \
+            "$GITHUB_WORKSPACE/consumer" \
+            "$GITHUB_WORKSPACE/consumer" \
+            "$RUNNER_TEMP/prompt.txt" \
+            change
 
       - name: Implement with Claude Code
         uses: ./runtime/.github/actions/run-agent
@@ -374,7 +410,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 6113198d02f1982d9c424eb25644732c00534632
+          ref: 902fff3ebc8b39650604ddd68d4eea35b36815ec
           path: runtime
           sparse-checkout: .github/scripts/agentic
           sparse-checkout-cone-mode: false
@@ -434,7 +470,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 6113198d02f1982d9c424eb25644732c00534632
+          ref: 902fff3ebc8b39650604ddd68d4eea35b36815ec
           path: runtime
           sparse-checkout: .github/scripts/agentic/publish-change.sh
           sparse-checkout-cone-mode: false
@@ -487,7 +523,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 6113198d02f1982d9c424eb25644732c00534632
+          ref: 902fff3ebc8b39650604ddd68d4eea35b36815ec
           path: runtime
           sparse-checkout: .github/actions/feishu-notify
           sparse-checkout-cone-mode: false

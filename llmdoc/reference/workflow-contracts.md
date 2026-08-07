@@ -53,10 +53,22 @@ revision; after updating a moving ref, use a fresh matching event/run to consume
 
 ## Shared Runtime Pin
 
-`question`, `issue-dispatch`, `implement` and `update-llmdoc` obtain their runner, scripts, Skills and
-publisher from one immutable template commit. Consumers do not copy these files. Runtime authoring
-changes land first; a following commit advances all workflow refs. The agentic contract test requires
-one 40-character ref and byte-for-byte equality between every pinned runtime path and the current tree.
+All five workflows obtain their runner, scripts, Skills, reviewer policy and publisher from one
+immutable template commit. Consumers do not copy these files. Runtime authoring changes land first; a
+following commit advances all workflow refs. Both contract tests require one 40-character ref per
+workflow and byte-for-byte equality between every pinned runtime path and the current tree.
+
+## Environment Setup Hook
+
+Every workflow accepts optional `setup_script`, a normalized repository-relative path of
+`[A-Za-z0-9._/-]` characters. Empty is a no-op; a missing declared file warns and continues; an
+existing file runs with a fixed 15-minute step timeout and no secret in its environment.
+
+`pr-review` reads it from the PR base SHA through `.trusted-base`; the other four read it from the
+event-pinned consumer checkout. Runtime failure appends the exit code and truncated log tail to the
+prompt as untrusted data and does not fail the job or change `INCOMPLETE`/`READY` validation.
+Path-validation failure fails the job. `implement` and `update-llmdoc` additionally require a clean
+worktree after the hook and steer the Agent toward `BLOCKED` when preparation prevented verification.
 
 ## Submodules
 

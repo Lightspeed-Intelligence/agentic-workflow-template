@@ -11,6 +11,9 @@
 - `use_feishu_notify` boolean, default `true`.
 - `extra_allowed_tools` comma-separated Claude tool patterns; only normalized repository-relative
   `git -C` plus `diff`, `log`, `show`, `status`, `rev-parse`, `merge-base` or `ls-files`.
+- `setup_script` optional repository-relative path of `[A-Za-z0-9._/-]` characters, read from the PR
+  base SHA. Empty is a no-op; a missing declared file warns and continues. Runs after review inputs are
+  frozen and before CLI installation, with a fixed 15-minute step timeout and no secret in scope.
 - `ANTHROPIC_API_KEY` required; `ANTHROPIC_BASE_URL` optional.
 - `OPENAI_API_KEY` and `OPENAI_BASE_URL` optional. Codex resolves each independently as
   `OPENAI_*` first, then the corresponding `ANTHROPIC_*` value; Claude always uses `ANTHROPIC_*`.
@@ -74,10 +77,14 @@ Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even w
 - Findings are successful review results; `REQUEST_CHANGES` does not trigger fallback.
 - If neither reviewer succeeds, notification may run but the publisher job ultimately fails.
 - Feishu is best effort and cannot turn a failed review into success or a successful review into failure.
+- `setup_script` runtime failure or step timeout is non-fatal: the exit code and truncated log tail are
+  appended to the prompt as untrusted data and the reviewer discloses the limitation. It alone does not
+  justify `INCOMPLETE` and does not trigger fallback. Path-validation failure fails the reviewer job.
 
 ## Sources of Truth
 
 - `.github/workflows/pr-review.yml`
 - `.github/scripts/pr-review/prepare-review-history.sh`
+- `.github/scripts/agentic/run-setup-hook.sh`
 - `scripts/test-pr-review-contract.py`
 - `.claude/skills/pr-review/SKILL.md`
