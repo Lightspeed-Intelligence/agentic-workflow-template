@@ -480,6 +480,34 @@ def test_setup_hook_behavior() -> None:
             # 产生未被忽略的新文件同样被拒绝。
             assert run_mode("untracked", mode) == 1, mode
 
+        # 回归 issue #31：pr-review 把 .trusted-base / .trusted-policy checkout 到
+        # $GITHUB_WORKSPACE，又以同一目录作为 repo_dir。这些目录在准备脚本运行前就存在，
+        # 属于 workflow 实现细节，不得被算作准备脚本的产物——否则只要声明 setup_script
+        # 就必然失败，且报错指向错误的原因。
+        for path in (".trusted-base/.github/x", ".trusted-policy/.claude/marker"):
+            target = source / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("workflow-owned\n")
+        for mode in ("change", "review"):
+            assert run_mode("ignored", mode) == 0, (mode, "trusted dirs must not be blamed")
+            # 真实污染仍须被拒绝，预存的未跟踪目录不得成为普遍豁免。
+            assert run_mode("tracked", mode) == 1, mode
+            assert run_mode("untracked", mode) == 1, mode
+
+        # 但消费仓库若真的跟踪了同名目录下的文件，改动它仍须被拒绝：豁免的依据是
+        # 「基线中已存在的状态条目」，不是「路径名匹配」。
+        tracked_in_trusted = source / ".trusted-base/consumer-owned.txt"
+        tracked_in_trusted.parent.mkdir(parents=True, exist_ok=True)
+        tracked_in_trusted.write_text("real\n")
+        (source / ".github/setup-trusted-tracked.sh").write_text(
+            "echo polluted >> .trusted-base/consumer-owned.txt\n"
+        )
+        git(source, "add", "-f", ".trusted-base/consumer-owned.txt",
+            ".github/setup-trusted-tracked.sh")
+        git(source, "commit", "-qm", "consumer tracks a same-named path")
+        for mode in ("change", "review"):
+            assert run_mode("trusted-tracked", mode) == 1, (mode, "tracked file must still fail")
+
 
 def test_model_secret_routing(workflow: str, caller: str) -> None:
     pr_caller_match = re.search(r'^  pr-review:\n(.*)\Z', caller, re.MULTILINE | re.DOTALL)

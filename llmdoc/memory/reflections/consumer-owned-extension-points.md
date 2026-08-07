@@ -136,6 +136,38 @@ nothing compared the five workflows' pins *to each other* — repinning one work
 real commit passed. A claim about a cross-file invariant needs a check that actually reads across those
 files.
 
+## The template cannot test a consumer-only configuration
+
+Issue #31: after this extension point shipped, any consumer declaring `setup_script` in `pr-review.yml`
+failed on both the primary and the fallback chain, with the error blaming the consumer's setup script for
+dirtying the worktree. The real cause was that `pr-review` checks out `.trusted-base` and
+`.trusted-policy` **inside** `$GITHUB_WORKSPACE` and then passes that same directory as the hook's
+`repo_dir`, so `git status` was always going to list them as untracked. The timing made it unavoidable:
+those directories exist before the hook runs, and the assertion runs after.
+
+Nine local blind rounds, two automated PR reviews and a terminal audit all missed it. The reason is
+structural, not carelessness: **this repository never declares `setup_script` on itself.** The code path
+that fails is only reachable from a consumer configuration, so every green run — including the PR that
+introduced the bug reviewing itself — exercised the empty-input no-op branch instead. Reviewers verified
+the clean-worktree assertion against synthetic fixtures where `repo_dir` contained nothing but the fixture
+repository, which is precisely the condition that hides the defect.
+
+Two lessons:
+
+- When adding an opt-in extension point that this repository will not itself opt into, the offline fixture
+  must reproduce the **caller's** directory layout, not just the script's contract. Passing `repo_dir` a
+  bare fixture repo tests an arrangement no real caller uses. The regression test now plants
+  `.trusted-base`/`.trusted-policy` inside the fixture before running the hook.
+- A shared script should not encode its callers' path conventions. The fix compares worktree status against
+  a baseline captured before the hook runs and reports only additions, so `run-setup-hook.sh` needs to know
+  nothing about `pr-review`'s layout. Excluding the two paths by name would have worked too, but it would
+  also have silently exempted a consumer that genuinely tracks files under those names — the issue reporter
+  flagged that risk explicitly. Keying on status entries rather than path names keeps that case failing.
+
+Also worth noting: the error text said "your setup script's artifacts must be gitignored" while pointing at
+a workflow-owned directory. A hardcoded diagnosis that names a cause it has not established sends every
+reader down the wrong path. The message is now only produced for state the hook actually introduced.
+
 ## Fixture hazards found while writing the harness
 
 - Temporary git repositories inherit the author's `commit.gpgsign`/`gpg.format`. With SSH signing,

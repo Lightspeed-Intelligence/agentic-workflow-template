@@ -213,12 +213,16 @@ pr-review:
 - 执行失败不终止任务。退出码和日志末尾会作为不可信数据交给 Agent，由它在结论中说明
   哪些验证没能进行。`review_status=INCOMPLETE` 的判定标准不变，环境受限不足以单独
   触发它。
-- **准备脚本的产物必须被 `.gitignore` 覆盖**，否则 job 失败。五个 workflow 都在准备脚本
-  执行后检查工作树是否洁净：`implement` 与 `update-llmdoc` 会把工作树打包成候选提交，
-  残留会被静默提交；`issue-dispatch` 在 Agent 之后断言工作树完全干净，残留会让主链路与
-  fallback 在同一处失败；`question` 与 `pr-review` 则会让 Agent 基于已偏离固定 SHA 的
-  checkout 工作。`implement` 与 `update-llmdoc` 还会引导 Agent 在无法验证改动时输出
-  `BLOCKED`，而不是提交未经验证的代码。
+- **准备脚本的产物必须被 `.gitignore` 覆盖**，否则 job 失败。五个 workflow 都会比对准备
+  脚本执行前后的工作树状态，只对脚本新增的脏状态报错：`implement` 与 `update-llmdoc` 会把
+  工作树打包成候选提交，残留会被静默提交；`issue-dispatch` 在 Agent 之后断言工作树完全
+  干净，残留会让主链路与 fallback 在同一处失败；`question` 与 `pr-review` 则会让 Agent
+  基于已偏离固定 SHA 的 checkout 工作。`implement` 与 `update-llmdoc` 还会引导 Agent 在
+  无法验证改动时输出 `BLOCKED`，而不是提交未经验证的代码。
+
+  比对基线的做法意味着：workflow 自己在工作区内创建的目录（`pr-review` 的
+  `.trusted-base` / `.trusted-policy`）不会被算作你的准备脚本产物，你不需要为它们添加
+  `.gitignore` 条目；但如果你的仓库真的跟踪了这些路径下的文件，改动它们仍会被拒绝。
 - 准备脚本只在运行 Agent 的 job 中执行，不覆盖校验候选提交的 validator job。因此
   消费仓库可选的 `.github/agentic/validate.sh` 仍然只能使用 runner 预装的工具链。
   这是有意为之：validator 的职责是在未经审查的候选提交上把关，不宜在其中准备环境。
