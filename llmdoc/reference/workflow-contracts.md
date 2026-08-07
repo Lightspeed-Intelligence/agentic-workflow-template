@@ -78,11 +78,21 @@ The baseline is captured only after the hook is known to exist, so a repository 
 empty runs no `git` command at all — otherwise an unrelated unusable gitlink would fail a job that does not
 use the feature.
 
-Known limit: an already-untracked file's porcelain line does not encode content, so a hook that rewrites a
-file which was already untracked before it ran is not detected. That is a property of `git status`, not of
-the baseline comparison, and it is bounded by the same trust model as the rest of the hook — owner-maintained
-configuration, not a security boundary. `implement` and `update-llmdoc` additionally steer the Agent toward
-`BLOCKED` when preparation prevented verification.
+Known limits, all inherent to `git status` porcelain rather than to the baseline comparison, and all bounded
+by the same trust model as the rest of the hook — owner-maintained configuration, not a security boundary:
+
+- A directory containing a nested `.git` is reported as a single folded entry (`?? .trusted-policy/`).
+  Anything the hook adds, deletes or rewrites **inside** such a directory produces no new porcelain line and
+  is therefore undetected. This is the live case in `pr-review`, because `actions/checkout` with `path:`
+  creates that nested `.git`.
+- A porcelain line does not encode content, so rewriting a file that was already listed — untracked
+  individually, or tracked but already modified — yields the same line and is undetected.
+
+What remains guarded: any change that produces a *new* status entry, including modification of a
+consumer-tracked file anywhere in the tree (exemption keys on status lines, not path names).
+
+`implement` and `update-llmdoc` additionally steer the Agent toward `BLOCKED` when preparation prevented
+verification.
 
 ## Submodules
 

@@ -168,6 +168,29 @@ Also worth noting: the error text said "your setup script's artifacts must be gi
 a workflow-owned directory. A hardcoded diagnosis that names a cause it has not established sends every
 reader down the wrong path. The message is now only produced for state the hook actually introduced.
 
+### I "corrected" a reviewer and was wrong
+
+The first-round reviewer described the masking mechanism as porcelain *folding* of a directory. I tried to
+reproduce it, saw the file listed individually under `--untracked-files=all`, and recorded a correction in the
+ledger saying the real mechanism was that an untracked file's status line is content-independent.
+
+The reviewer disputed that in its supplement, and it was right. A directory containing a **nested `.git`**
+folds to a single `?? dir/` entry, and adding or deleting files inside it produces no new line at all. My
+fixture had no nested `.git`, so I reproduced a different, weaker phenomenon and generalised from it. In the
+real `pr-review` layout the nested `.git` always exists, because `actions/checkout` with `path:` creates it —
+so folding is the live mechanism, not the edge case. Verified directly: a hook that writes a new file into
+`.trusted-policy/` and deletes an existing one exits 0.
+
+Both mechanisms are real and they have different consequences, so the documentation now lists them
+separately. Two lessons:
+
+- When a reproduction contradicts a reviewer's stated mechanism, suspect the fixture before the reviewer.
+  Mine differed from the real caller layout in exactly the detail that mattered — the same class of mistake
+  that caused issue #31 in the first place.
+- A ledger correction is an assertion like any other and deserves the same standard of evidence as a finding.
+  Writing "the reviewer's description is wrong" on the strength of one fixture was premature; the retraction
+  is recorded rather than quietly dropped.
+
 ### A baseline must be captured no earlier than the action it measures
 
 The first fix put the baseline capture at the top of the script, before the `setup_script`-is-empty

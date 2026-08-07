@@ -523,23 +523,37 @@ def test_setup_hook_behavior() -> None:
             ".trusted-base/.github/x": "workflow-owned\n",
             ".trusted-policy/.claude/marker": "workflow-owned\n",
         })
+        # 真实布局里 actions/checkout 带 path: 会在这些目录内留下嵌套 .git，porcelain 因此
+        # 把整个目录折叠成一行。fixture 必须复现这一点，否则测到的是比真实情况更宽松的形态。
+        for trusted in (".trusted-base", ".trusted-policy"):
+            nested = source / trusted
+            nested.mkdir(parents=True, exist_ok=True)
+            if not (nested / ".git").exists():
+                run(["git", "init", "-q"], cwd=nested)
+        folded = git(source, "status", "--porcelain", "--untracked-files=all")
+        assert "?? .trusted-base/\n" in folded + "\n", folded
+        assert "?? .trusted-policy/\n" in folded + "\n", folded
         for mode in ("change", "review"):
             assert run_mode("ignored", mode) == 0, (mode, "trusted dirs must not be blamed")
             # 真实污染仍须被拒绝，预存的未跟踪目录不得成为普遍豁免。
             assert run_mode("tracked", mode) == 1, mode
             assert run_mode("untracked", mode) == 1, mode
 
-        # 但消费仓库若真的跟踪了同名目录下的文件，改动它仍须被拒绝：豁免的依据是
-        # 「基线中已存在的状态条目」，不是「路径名匹配」。
-        tracked_in_trusted = source / ".trusted-base/consumer-owned.txt"
-        tracked_in_trusted.parent.mkdir(parents=True, exist_ok=True)
-        tracked_in_trusted.write_text("real\n")
+        # 豁免的依据是「基线中已存在的状态条目」，不是「路径名匹配」：以 .trusted 开头的
+        # 路径本身不构成豁免，跟踪文件的改动仍会产生新的 porcelain 行并被拒绝。
+        #
+        # 这个用例刻意放在折叠目录之外。真实布局中 .trusted-* 内含嵌套 .git，整个目录折叠
+        # 为一行，目录内的任何改动都不会产生新行——那是 workflow-contracts.md 记录的固有
+        # 限制，不是本断言要验证的性质。把用例放进折叠目录只会测到那条限制。
+        tracked_lookalike = source / ".trusted-sidecar/consumer-owned.txt"
+        tracked_lookalike.parent.mkdir(parents=True, exist_ok=True)
+        tracked_lookalike.write_text("real\n")
         (source / ".github/setup-trusted-tracked.sh").write_text(
-            "echo polluted >> .trusted-base/consumer-owned.txt\n"
+            "echo polluted >> .trusted-sidecar/consumer-owned.txt\n"
         )
-        git(source, "add", "-f", ".trusted-base/consumer-owned.txt",
+        git(source, "add", "-f", ".trusted-sidecar/consumer-owned.txt",
             ".github/setup-trusted-tracked.sh")
-        git(source, "commit", "-qm", "consumer tracks a same-named path")
+        git(source, "commit", "-qm", "consumer tracks a .trusted-prefixed path")
         for mode in ("change", "review"):
             assert run_mode("trusted-tracked", mode) == 1, (mode, "tracked file must still fail")
 
