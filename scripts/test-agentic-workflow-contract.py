@@ -479,10 +479,19 @@ def test_setup_hook_wiring() -> None:
             # 准备脚本不得收到任何 secret：它能写 GITHUB_ENV，从而把凭据泄漏给持有
             # 模型密钥的后续步骤，破坏「Agent 进程不接收 GitHub/PAT 凭据」不变量。
             assert "secrets." not in step, (name, step)
+            # 步骤级兜底必须挂在这个步骤上，而不是文件里任意位置。
             assert "timeout-minutes: 15" in step, name
-            assert "runtime/.github/scripts/agentic/run-setup-hook.sh" in step, name
-            assert '"$GITHUB_WORKSPACE/consumer"' in step, name
-            assert step.rstrip().endswith(expected_mode[name]), (name, step)
+            # 断言完整参数序列。只查存在性时，把 SOURCE_DIR 与 REPO_DIR 换位、或给
+            # PROMPT_FILE 换成不会被读取的路径，都能通过而语义已被改坏。
+            assert re.search(
+                r'bash runtime/\.github/scripts/agentic/run-setup-hook\.sh \\\n'
+                r'\s+"\$SETUP_SCRIPT" \\\n'
+                r'\s+"\$GITHUB_WORKSPACE/consumer" \\\n'
+                r'\s+"\$GITHUB_WORKSPACE/consumer" \\\n'
+                r'\s+"\$RUNNER_TEMP/prompt\.txt" \\\n'
+                rf'\s+{expected_mode[name]}$',
+                step,
+            ), (name, step)
 
         # 位置必须在任务输入冻结之后、Agent 启动之前。必须逐 job 切片后再比较位置：
         # 在整份 workflow 文本上用 str.index 只会命中主链路那一处，fallback job 的顺序

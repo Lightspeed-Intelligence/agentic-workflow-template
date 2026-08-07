@@ -115,8 +115,17 @@ alone already closed the gap. The current code still locates each position indep
 absolute offsets, because relying on an exception to enforce an ordering is fragile: it depends on the
 needle being unique inside the block, and a second occurrence would silently restore the blind spot.
 
+A third variant of the same mistake outlived both fixes: the assertions checked that each argument
+literal *appeared somewhere* in the step, not that the arguments were in the right order. Swapping the
+source directory and the repository directory left both literals present while making the hook read its
+script from the PR head worktree instead of the trusted base checkout — destroying the exact property
+the trust boundary rests on — and both harnesses passed. Appending characters to a path, or pointing the
+prompt file at a path nobody reads, passed too. Asserting the whole five-argument sequence as one regex
+closes all of them.
+
 Lesson: verify an ordering assertion by breaking it in every direction it should catch, and confirm the
-failure is the one you expect. The mutation surface here is 20 cases — five workflows carry the hook,
+failure is the one you expect. "Contains the right strings" is not "calls it the right way": when
+argument position carries meaning, assert the sequence, not the membership. The mutation surface here is 20 cases — five workflows carry the hook,
 each with a primary and a fallback job, and each job's hook can move to either side of its neighbours —
 not the 4 I first checked. A fix that "looks correct" is not evidence; my own first attempt appeared to
 pass a mutation that had in fact failed to apply, and I initially misattributed that to the derived

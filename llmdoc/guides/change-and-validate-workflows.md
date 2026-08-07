@@ -154,6 +154,10 @@ repeatedly clicking **Re-run jobs** cannot validate the newly merged workflow.
   spot.
 - Claiming a cross-file invariant (for example "no split pin") without a check that reads across those
   files. Verify each ordering or containment assertion by breaking it in every direction it should catch.
+- Asserting that each argument literal appears somewhere in a step instead of asserting the argument
+  sequence. Swapping two path operands keeps every literal present while inverting the meaning — for the
+  setup hook that silently moves the script source from the trusted checkout to the PR head worktree.
+  Also anchor step-level settings such as `timeout-minutes` inside the step block, not by file-wide count.
 - Describing a base-pinned script as preventing PR-driven code execution. The script is pinned but its
   input is not: dependency manifests from the working tree still execute during installation.
 - Resolving a hook path relative to the caller's directory when the runner will `cd` elsewhere before

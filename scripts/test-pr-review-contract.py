@@ -308,11 +308,21 @@ def test_setup_hook_wiring(workflow: str) -> None:
         # 准备脚本不得收到任何 secret，否则它可以经 GITHUB_ENV 把凭据传给持有模型
         # 密钥的后续步骤，破坏「Agent 进程不接收 GitHub/PAT 凭据」这条不变量。
         assert "secrets." not in step, step
-        # 脚本本体来自模板固定版本，而非可被 PR 修改的 head 工作树。
-        assert ".trusted-policy/.github/scripts/agentic/run-setup-hook.sh" in step
-        # 待执行脚本从 base commit 的稀疏检出读取。
-        assert '"$GITHUB_WORKSPACE/.trusted-base"' in step
-        assert step.rstrip().endswith("review")
+        # 断言完整的参数序列，而不是逐个检查「某字面量出现过」。只查存在性时，把
+        # SOURCE_DIR 与 REPO_DIR 换位仍能通过——两个字面量都还在，但准备脚本会改从
+        # 可被 PR 修改的 head 工作树读取，正是本扩展点的信任基础所要防的。
+        assert re.search(
+            r'bash "\$GITHUB_WORKSPACE/\.trusted-policy/\.github/scripts/agentic/'
+            r'run-setup-hook\.sh" \\\n'
+            r'\s+"\$SETUP_SCRIPT" \\\n'
+            r'\s+"\$GITHUB_WORKSPACE/\.trusted-base" \\\n'
+            r'\s+"\$GITHUB_WORKSPACE" \\\n'
+            r'\s+"\$RUNNER_TEMP/review-prompt\.txt" \\\n'
+            r'\s+review$',
+            step,
+        ), step
+        # 步骤级兜底必须挂在这个步骤上，而不是文件里任意位置。
+        assert "timeout-minutes: 15" in step, step
 
     # 位置必须在审查范围冻结之后：diff/commit 列表已写入 RUNNER_TEMP，准备脚本无法
     # 再影响审查哪些改动；同时仍在安装 CLI 之前，它写入的 PATH 对 Agent 有效。
