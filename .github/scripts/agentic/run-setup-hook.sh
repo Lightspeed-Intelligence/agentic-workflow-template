@@ -28,10 +28,15 @@ case "$mode" in
     ;;
 esac
 
-# 工作树洁净检查只对打包候选提交的链路有意义。change 模式下准备脚本留下的改动会
-# 被 package-change-result.sh 的 `git add -A` 静默打包进候选提交，因此必须拒绝。
+# 所有模式都要求准备脚本执行后工作树保持洁净。
+#
+# change 模式：残留改动会被 package-change-result.sh 的 `git add -A` 静默打包进候选提交。
+#
+# review 模式同样不能放过。issue-dispatch 在 Agent 之后断言工作树完全干净，残留会让
+# Codex 与 Claude fallback 在同一处失败，最终一条结论都产出不了——正是非致命设计要避免
+# 的后果。question 与 pr-review 不会失败，但 Agent 会基于已偏离固定 SHA 的 checkout 分析，
+# 与「准备脚本只影响验证工具链、不影响审查什么」这条契约矛盾。
 assert_clean_worktree() {
-  [[ "$mode" == change ]] || return 0
   local dirty dirty_submodules
   # 口径与 package-change-result.sh 保持一致：--ignore-submodules=none 覆盖消费仓库把
   # submodule.<name>.ignore 设为 all 的情况，递归 foreach 捕获 submodule 内部的脏状态。
