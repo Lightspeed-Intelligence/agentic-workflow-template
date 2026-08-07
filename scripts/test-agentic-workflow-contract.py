@@ -484,12 +484,29 @@ def test_setup_hook_wiring() -> None:
             assert '"$GITHUB_WORKSPACE/consumer"' in step, name
             assert step.rstrip().endswith(expected_mode[name]), (name, step)
 
-        # 位置必须在任务输入冻结之后、Agent 启动之前。
-        for agent_step in re.findall(r"      - name: ((?:Answer|Analyze|Implement|Update llmdoc) with [^\n]+)", text):
-            contract_at = text.index("- name: Prepare")
-            hook_at = text.index("- name: Run repository setup script", contract_at)
-            agent_at = text.index(f"- name: {agent_step}")
-            assert contract_at < hook_at < agent_at, (name, agent_step)
+        # 位置必须在任务输入冻结之后、Agent 启动之前。必须逐 job 切片后再比较位置：
+        # 在整份 workflow 文本上用 str.index 只会命中主链路那一处，fallback job 的顺序
+        # 实际不会被检查。
+        primary, fallback = {
+            "question": ("codex_answer", "claude_answer"),
+            "issue-dispatch": ("codex_analyze", "claude_analyze"),
+            "implement": ("codex_candidate", "claude_candidate"),
+            "update-llmdoc": ("codex_candidate", "claude_candidate"),
+        }[name]
+        for job in (primary, fallback):
+            block = job_block(text, job)
+            agent_steps = re.findall(
+                r"      - name: ((?:Answer|Analyze|Implement|Update llmdoc) with [^\n]+)", block,
+            )
+            assert agent_steps, (name, job)
+            # 每个位置都独立从块首查找。若用 index(..., contract_at) 定位 hook，搜索起点
+            # 就已经排除了「hook 在 Prepare 之前」这种要防的错误，断言将永远不会失败。
+            contract_at = block.index("- name: Prepare")
+            hook_at = block.index("- name: Run repository setup script")
+            assert contract_at < hook_at, (name, job, "hook must run after inputs are frozen")
+            for agent_step in agent_steps:
+                agent_at = block.index(f"- name: {agent_step}")
+                assert hook_at < agent_at, (name, job, agent_step)
 
     # 两条写代码链路的提示词都要引导 Agent 在无法验证时选择 BLOCKED，而不是推出未验证
     # 的改动。公开文档同时宣称 implement 与 update-llmdoc 都有这条指引，因此两者都断言。

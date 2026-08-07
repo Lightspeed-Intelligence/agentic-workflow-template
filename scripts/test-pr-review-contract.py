@@ -176,6 +176,12 @@ def test_history_selection(repo_info: dict[str, str]) -> None:
                  "full", "prior_review_not_small_increment")
 
 
+def job_block(workflow: str, job: str) -> str:
+    match = re.search(rf"^  {re.escape(job)}:\n(.*?)(?=^  [A-Za-z0-9_-]+:|\Z)", workflow, re.M | re.S)
+    assert match, f"job {job} not found"
+    return match.group(0)
+
+
 def extract_step_run(workflow: str, name: str) -> str:
     lines = workflow.splitlines()
     target = f"      - name: {name}"
@@ -310,11 +316,19 @@ def test_setup_hook_wiring(workflow: str) -> None:
 
     # 位置必须在审查范围冻结之后：diff/commit 列表已写入 RUNNER_TEMP，准备脚本无法
     # 再影响审查哪些改动；同时仍在安装 CLI 之前，它写入的 PATH 对 Agent 有效。
-    for cli in ("Install pinned Codex CLI", "Install pinned Claude Code CLI"):
-        prepare_at = workflow.index("- name: Prepare trusted review inputs")
-        hook_at = workflow.index("- name: Run repository setup script", prepare_at)
-        cli_at = workflow.index(f"- name: {cli}")
-        assert prepare_at < hook_at < cli_at, cli
+    # 必须逐 job 切片：在整份 workflow 文本上用 str.index 只会命中 codex job 那一处，
+    # claude fallback 的顺序实际不会被检查。
+    for job, cli in (
+        ("codex_review", "Install pinned Codex CLI"),
+        ("claude_review", "Install pinned Claude Code CLI"),
+    ):
+        block = job_block(workflow, job)
+        # 每个位置都独立从块首查找。若用 index(..., prepare_at) 定位 hook，搜索起点就已经
+        # 排除了「hook 在 Prepare 之前」这种要防的错误，断言将永远不会失败。
+        prepare_at = block.index("- name: Prepare trusted review inputs")
+        hook_at = block.index("- name: Run repository setup script")
+        cli_at = block.index(f"- name: {cli}")
+        assert prepare_at < hook_at < cli_at, (job, cli)
 
 
 def test_setup_hook_behavior() -> None:
@@ -533,6 +547,21 @@ def test_trusted_policy_source(workflow: str) -> None:
         "git", "ls-tree", "-r", "--name-only", policy_sha, "--", ".claude/skills/pr-review",
     ], cwd=ROOT).stdout.splitlines()
     assert policy_files == [".claude/skills/pr-review/SKILL.md"]
+
+    # 五个 workflow 必须共用同一个版本号。此前两个 harness 各自只读自己那几个 workflow，
+    # 没有任何检查会发现 pr-review 被单独重新 pin 到另一个真实 commit（split pin）。
+    all_refs: set[str] = set()
+    for name in (
+        "pr-review", "question", "issue-dispatch", "implement", "update-llmdoc",
+    ):
+        text = (ROOT / f".github/workflows/{name}.yml").read_text()
+        refs = re.findall(
+            r"repository: Lightspeed-Intelligence/agentic-workflow-template\n\s+ref: ([^\s#]+)",
+            text,
+        )
+        assert refs, name
+        all_refs.update(refs)
+    assert all_refs == {policy_sha}, all_refs
 
 
 def test_prepare_script_selection(workflow: str, repo_info: dict[str, str]) -> None:
