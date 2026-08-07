@@ -217,6 +217,9 @@ pr-review:
   workflow 会把工作树打包成候选提交。**准备脚本的产物必须被 `.gitignore` 覆盖**，
   否则 job 失败。这两个 workflow 还会引导 Agent 在无法验证改动时输出 `BLOCKED`，
   而不是提交未经验证的代码。
+- 准备脚本只在运行 Agent 的 job 中执行，不覆盖校验候选提交的 validator job。因此
+  消费仓库可选的 `.github/agentic/validate.sh` 仍然只能使用 runner 预装的工具链。
+  这是有意为之：validator 的职责是在未经审查的候选提交上把关，不宜在其中准备环境。
 
 四个 Issue/文档 workflow 与 PR 审查都优先使用 Codex + GPT-5.6-sol。进程失败、schema
 失败或结构化失败状态会在全新 runner 中启动 Claude Code + `claude-opus-5` fallback。

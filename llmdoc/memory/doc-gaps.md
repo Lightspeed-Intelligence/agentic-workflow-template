@@ -17,6 +17,12 @@
   scoped credential interface for private dependencies is still undesigned.
 - Setup-hook caching is undefined. Codex and Claude run on separate runners, so a consumer with a slow
   toolchain pays the preparation cost twice within the 45-minute reviewer budget.
+- `setup_script` does not reach the `validate_codex`/`validate_claude` jobs, which execute a consumer's
+  optional base-pinned `.github/agentic/validate.sh`. For the exact scenario that motivated the hook — a
+  project needing a specific JDK or an internal Python package — that validator still cannot run. Extending
+  the hook there means preparing an environment inside a job whose purpose is to gate an unreviewed
+  candidate commit, so it is a deliberate omission rather than an oversight, but the public docs now
+  advertise the capability without naming this boundary.
 - No offline fixture exercises submodule dirtiness for the setup hook's clean-worktree assertion. The
   contract harnesses would catch a change to `run-setup-hook.sh` that did not advance the runtime pin,
   but not a reverted submodule-dirty definition committed together with a pin advance. Building such a

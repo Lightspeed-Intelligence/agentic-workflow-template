@@ -308,6 +308,14 @@ def test_setup_hook_wiring(workflow: str) -> None:
         workflow, re.S | re.M,
     )
     assert len(steps) == 2, steps
+
+    # 步骤级切片看不到 job 级或 workflow 级 env：那里放一个 secret 同样会被 hook 步骤继承。
+    # 当前两处都没有 env，直接断言其不存在，比逐个排除更简单也更严格。
+    assert not re.search(r"^env:", workflow, re.M), "workflow 级 env 会被 hook 步骤继承"
+    for job in ("codex_review", "claude_review"):
+        block = job_block(workflow, job)
+        header = block.split("    steps:", 1)[0]
+        assert not re.search(r"^    env:", header, re.M), f"{job} 不得声明 job 级 env"
     for step in steps:
         # 准备脚本不得收到任何 secret，否则它可以经 GITHUB_ENV 把凭据传给持有模型
         # 密钥的后续步骤，破坏「Agent 进程不接收 GitHub/PAT 凭据」这条不变量。
