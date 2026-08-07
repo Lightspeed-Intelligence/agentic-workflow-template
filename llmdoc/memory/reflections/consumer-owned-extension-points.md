@@ -56,6 +56,49 @@ distinct step, it can write `GITHUB_ENV`, and later steps holding the model key 
 it". The capability was deliberately deferred rather than weakened; `llmdoc/memory/doc-gaps.md`
 records the undesigned credential interface.
 
+## A step-level timeout cannot be caught by the step's own script
+
+The first implementation bounded the hook with `timeout-minutes: 15` and relied on the script's
+`hook_status=$?` branch to degrade gracefully. That combination does not work: when a step-level
+timeout fires, the runner kills the whole process tree and marks the step failed, so the degradation
+branch never executes. Four separate documents and the script's own comment asserted the opposite.
+
+The failure mode it produced was precisely the one the non-fatal design existed to prevent — and it
+would have triggered on exactly the slow toolchains that motivate the hook. The fix is for the script
+to bound itself with `timeout`, turning expiry into an ordinary non-zero exit (GNU `timeout` uses 124)
+that reuses the disclosure path, while `timeout-minutes` remains a wider backstop.
+
+Lesson: when a mechanism promises graceful degradation, verify that the failure it degrades from is
+actually observable by the code doing the degrading. Writing the promise in four documents does not
+make the control flow real.
+
+## Keep a derived value in one place
+
+`llmdoc/reference/pr-review-contract.md` duplicated the policy SHA as a literal. Merging the pins
+updated all 21 workflow references but left that literal stale, and the same change had replaced the
+one test that hardcoded it with a regex extraction — removing the only thing that would have caught
+the drift. The document now points at the workflow as the source of truth, and a contract assertion
+rejects any 40-character SHA literal in `README.md`/`docs/` or a non-current one anywhere in `llmdoc/`.
+
+Lesson: when you relax an assertion from an exact literal to a pattern, check what that literal was
+incidentally protecting elsewhere.
+
+## Assert on every flow a document claims to cover
+
+The public docs stated that `implement` **and** `update-llmdoc` steer the Agent toward `BLOCKED` when
+preparation failed, but only `implement` had the prompt text — and the contract test asserted on
+`implement` alone, so CI agreed with the code rather than the contract. A documented claim that spans
+N flows needs an assertion that loops over all N.
+
+## Match sibling checks exactly or explain the divergence
+
+The hook's clean-worktree assertion used plain `git status --porcelain --untracked-files=all` while the
+sibling `package-change-result.sh` used `--ignore-submodules=none` plus a recursive `submodule foreach`.
+The two diverge once a consumer sets `submodule.<name>.ignore = all`; the user would then see a
+misleading "cross-repository changes unsupported" `BLOCKED` instead of "your setup script dirtied the
+worktree". No safety invariant broke, but the diagnostic was wrong. Two checks guarding the same
+invariant should share one definition of dirty.
+
 ## Fixture hazards found while writing the harness
 
 - Temporary git repositories inherit the author's `commit.gpgsign`/`gpg.format`. With SSH signing,

@@ -494,6 +494,17 @@ def test_trusted_policy_source(workflow: str) -> None:
         pinned = run(["git", "show", f"{policy_sha}:{relative}"], cwd=ROOT).stdout
         assert pinned == (ROOT / relative).read_text(), f"policy pin is stale for {relative}"
 
+    # 文档不得复制可能变陈旧的 SHA 字面量。此前 pr-review-contract.md 硬编码了旧的
+    # policy SHA，而唯一引用它的测试改为正则提取后，这条字面量失去了任何自动检查。
+    for doc in ("README.md", "docs/code-review-design.md"):
+        assert not re.search(r"\b[0-9a-f]{40}\b", (ROOT / doc).read_text()), doc
+    for doc in sorted((ROOT / "llmdoc").rglob("*.md")):
+        stale = [
+            sha for sha in re.findall(r"\b[0-9a-f]{40}\b", doc.read_text())
+            if sha != policy_sha
+        ]
+        assert not stale, (str(doc.relative_to(ROOT)), stale)
+
     policy_files = run([
         "git", "ls-tree", "-r", "--name-only", policy_sha, "--", ".claude/skills/pr-review",
     ], cwd=ROOT).stdout.splitlines()

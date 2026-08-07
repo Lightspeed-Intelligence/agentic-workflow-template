@@ -491,9 +491,17 @@ def test_setup_hook_wiring() -> None:
             agent_at = text.index(f"- name: {agent_step}")
             assert contract_at < hook_at < agent_at, (name, agent_step)
 
-    # 写代码链路的提示词要引导 Agent 在无法验证时选择 BLOCKED，而不是推出未验证的改动。
-    implement = WORKFLOWS["implement"].read_text()
-    assert implement.count("倾向输出 BLOCKED") == 2
+    # 两条写代码链路的提示词都要引导 Agent 在无法验证时选择 BLOCKED，而不是推出未验证
+    # 的改动。公开文档同时宣称 implement 与 update-llmdoc 都有这条指引，因此两者都断言。
+    for name in ("implement", "update-llmdoc"):
+        text = WORKFLOWS[name].read_text()
+        assert text.count("倾向输出 BLOCKED") == 2, name
+
+    # 步骤级 timeout-minutes 到期时 runner 直接杀掉进程树并判定步骤失败，脚本的降级分支
+    # 不会执行。脚本必须自行用 timeout 限时，才能让超时变成可披露的非零退出码。
+    hook = (SCRIPTS / "run-setup-hook.sh").read_text()
+    assert "timeout --signal=TERM" in hook
+    assert "-eq 124" in hook, "必须识别 GNU timeout 的超时退出码"
 
 
 def test_runtime_is_immutable() -> None:

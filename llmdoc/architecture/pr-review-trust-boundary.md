@@ -96,8 +96,11 @@ is a configuration error and fails the job; runtime failure is an environment co
   reads PR-head data: `pip install -r requirements.txt` executes a dependency's `setup.py` and `mvn`
   executes the head `pom.xml`. The pinned source removes one direct injection path; it is not a boundary.
 - `setup_script` failure is deliberately non-fatal so a missing runtime degrades disclosure instead of
-  producing no review at all. A reviewer therefore may report on a partially prepared environment; the
-  15-minute step timeout leaves already-written `PATH`/env values and half-installed dependencies in place.
+  producing no review at all. A reviewer therefore may report on a partially prepared environment.
+  The script bounds itself with `timeout` (13m) so a timeout becomes an ordinary non-zero exit that
+  reuses the disclosure path; the step-level `timeout-minutes: 15` is only a wider backstop, because a
+  step-level timeout kills the process tree and would skip the degradation branch entirely. Either way
+  already-written `PATH`/env values and half-installed dependencies remain in place.
 
 ## Sources of Truth
 

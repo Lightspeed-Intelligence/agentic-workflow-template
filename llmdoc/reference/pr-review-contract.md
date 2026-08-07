@@ -41,9 +41,11 @@ Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even w
 
 ## Review Range and History
 
-- The complete reviewer policy comes from the single `pr-review/SKILL.md` at immutable template revision
-  `e00fbc64c624c15f89a037bee7011d98693c3406`, not from the consumer repository. Consumer bases need
-  no matching reviewer-policy layout.
+- The complete reviewer policy comes from the single `pr-review/SKILL.md` at the immutable template
+  revision pinned by `.github/workflows/pr-review.yml`, not from the consumer repository. That revision
+  is the same single shared runtime pin the four agentic workflows use; read the current value from the
+  workflow rather than from this document, which must not duplicate a SHA that can go stale.
+  Consumer bases need no matching reviewer-policy layout.
 - History preparation uses only the base-SHA script. When base has no copy, deterministic workflow
   commands generate full `base...head` inputs with reason `trusted_preparation_unavailable`; PR-head
   preparation code is never executed.
@@ -77,9 +79,11 @@ Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even w
 - Findings are successful review results; `REQUEST_CHANGES` does not trigger fallback.
 - If neither reviewer succeeds, notification may run but the publisher job ultimately fails.
 - Feishu is best effort and cannot turn a failed review into success or a successful review into failure.
-- `setup_script` runtime failure or step timeout is non-fatal: the exit code and truncated log tail are
-  appended to the prompt as untrusted data and the reviewer discloses the limitation. It alone does not
-  justify `INCOMPLETE` and does not trigger fallback. Path-validation failure fails the reviewer job.
+- `setup_script` runtime failure or its own 13-minute `timeout` is non-fatal: the exit code (124 for a
+  timeout) and truncated log tail are appended to the prompt as untrusted data and the reviewer discloses
+  the limitation. It alone does not justify `INCOMPLETE` and does not trigger fallback. Path-validation
+  failure fails the reviewer job. The step-level `timeout-minutes: 15` is a wider backstop only; if it
+  ever fires, the runner kills the step and the degradation path does not run.
 
 ## Sources of Truth
 

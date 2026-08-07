@@ -138,6 +138,13 @@ repeatedly clicking **Re-run jobs** cannot validate the newly merged workflow.
 - Adding an owner-maintained preparation step to a code-writing flow without asserting a clean worktree
   afterwards: `package-change-result.sh` runs `git add -A`, so a tracked lockfile update or an unignored
   artifact silently becomes part of the candidate commit.
+- Promising graceful degradation from a failure the degrading code cannot observe. A step-level
+  `timeout-minutes` expiry kills the process tree, so an in-script exit-code branch never runs; bound
+  long-running consumer code with `timeout` inside the script and keep the step timeout as a backstop.
+- Duplicating a pinned SHA as a documentation literal, or relaxing an exact-literal assertion to a
+  pattern without checking what that literal was incidentally protecting.
+- Asserting on one workflow when the public contract claims the behavior for several.
+- Guarding one invariant with two checks that define "dirty" differently.
 - Describing a base-pinned script as preventing PR-driven code execution. The script is pinned but its
   input is not: dependency manifests from the working tree still execute during installation.
 - Resolving a hook path relative to the caller's directory when the runner will `cd` elsewhere before

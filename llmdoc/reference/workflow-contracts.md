@@ -62,7 +62,8 @@ workflow and byte-for-byte equality between every pinned runtime path and the cu
 
 Every workflow accepts optional `setup_script`, a normalized repository-relative path of
 `[A-Za-z0-9._/-]` characters. Empty is a no-op; a missing declared file warns and continues; an
-existing file runs with a fixed 15-minute step timeout and no secret in its environment.
+existing file runs bounded by the script's own 13-minute `timeout` (step-level `timeout-minutes: 15` is
+a wider backstop) with no secret in its environment.
 
 `pr-review` reads it from the PR base SHA through `.trusted-base`; the other four read it from the
 event-pinned consumer checkout. Runtime failure appends the exit code and truncated log tail to the

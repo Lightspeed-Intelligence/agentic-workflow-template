@@ -63,7 +63,9 @@ stale or split pin cannot pass CI.
 ## Environment Setup Hook
 
 Every workflow accepts an optional `setup_script` path. Empty means no-op; a declared path missing from
-the trusted source warns and continues; an existing file runs with a fixed 15-minute step timeout.
+the trusted source warns and continues; an existing file runs bounded by the script's own 13-minute
+`timeout`, with a step-level `timeout-minutes: 15` as a wider backstop. The script bounds itself because
+a step-level timeout kills the process tree and would bypass the non-fatal degradation branch.
 
 The script is read from a trusted source — PR base SHA for `pr-review`, the event-pinned consumer
 checkout for the others — so the current change cannot edit the script itself. It still reads
