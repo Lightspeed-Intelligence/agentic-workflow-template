@@ -179,6 +179,18 @@ Lesson: a "before" measurement belongs immediately before the thing it measures,
 Placing it at the top of the script looks harmless because the value is only consumed later, but the
 *collection* has side effects and failure modes of its own.
 
+Guarding this needed a different kind of fixture. Asserting the early-return exit codes proves nothing —
+they were 0 both before and after the fix, because the failure only appears in a repository with an
+unusable gitlink. The regression test instead puts a fake `git` on `PATH` that records every invocation,
+then asserts the early-return paths record **nothing**, with a positive control confirming the real path
+does call `git`. Without that control the assertion would pass vacuously if the shim were never reached.
+
+Note also what did *not* protect this: reverting the relocation while leaving the pin stale fails CI, but
+only through the byte-for-byte pin comparison. That proves "you edited a pinned file without releasing it",
+not "the behavior is right". A reviewer demonstrated the gap by reverting *and* performing a correct
+two-commit repin — both harnesses then went green. When judging whether a guard exists, advance the pin as
+part of the mutation, or the pin check will mask the absence of a behavioral assertion.
+
 ### A reset in a shared fixture helper can silently disarm later cases
 
 The regression fixture planted the workflow-owned directories once, then ran each case through a helper that

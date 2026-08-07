@@ -160,7 +160,11 @@ repeatedly clicking **Re-run jobs** cannot validate the newly merged workflow.
   it passes as `repo_dir`.
 - Collecting a "before" baseline earlier than the action it measures. Put it past every early return: the
   collection itself has side effects and failure modes, so running it when the feature is disabled can fail
-  a job that does not use the feature.
+  a job that does not use the feature. Guard it by recording invocations (a fake `git` on `PATH`) rather than
+  by asserting exit codes, and include a positive control so the assertion cannot pass vacuously.
+- Judging whether a behavioral guard exists by mutating a pinned runtime file without advancing the pin. The
+  byte-for-byte pin comparison will fail regardless, masking the absence of any behavioral assertion. Perform
+  the full two-commit repin as part of the mutation.
 - Resetting state in a shared fixture helper without re-planting what the test depends on. Anything cleaned
   between cases must be re-created inside the helper, or only the first case is actually covered — verify by
   mutating each branch the cases claim to cover, not just the first.

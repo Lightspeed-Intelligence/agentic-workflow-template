@@ -368,7 +368,7 @@ def test_setup_hook_behavior() -> None:
     run(["bash", "-n", str(hook)])
 
     def invoke(script_path: str, *, mode: str = "review", body: str | None = None,
-               workspace: Path) -> tuple[int, str]:
+               workspace: Path, extra_path: str | None = None) -> tuple[int, str]:
         source = workspace / "consumer"
         (source / ".github").mkdir(parents=True, exist_ok=True)
         if body is not None:
@@ -385,6 +385,8 @@ def test_setup_hook_behavior() -> None:
         runner_temp.mkdir(exist_ok=True)
         env = os.environ.copy()
         env["RUNNER_TEMP"] = str(runner_temp)
+        if extra_path:
+            env["PATH"] = f"{extra_path}:{env['PATH']}"
         result = run(
             ["bash", str(hook), script_path, str(source), str(source), str(prompt), mode],
             env=env, check=False,
@@ -406,6 +408,30 @@ def test_setup_hook_behavior() -> None:
         # 执行成功：披露环境已就绪。
         code, prompt = invoke(".github/ok.sh", body="exit 0\n", workspace=workspace)
         assert code == 0 and "已成功执行" in prompt
+
+        # 提前返回的分支不得执行任何 git 命令。基线采集本身有副作用与失败模式：消费仓库
+        # 若存在 .gitmodules 缺条目的 gitlink，submodule foreach 会以 128 退出，把「本仓库
+        # 没声明 setup_script」变成 job 失败。用假 git 记录调用，而不是只看退出码——只看
+        # 退出码时，把采集移回脚本顶部仍能通过。
+        shim_dir = workspace / "shim"
+        shim_dir.mkdir(exist_ok=True)
+        calls = workspace / "git-calls.txt"
+        shim = shim_dir / "git"
+        shim.write_text(f'#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "{calls}"\nexit 0\n')
+        shim.chmod(0o755)
+        for script_path, body in (
+            ("", None),                       # 未声明
+            (".github/missing.sh", None),     # 声明但可信来源中不存在
+            ("/etc/passwd", None),            # 路径校验拒绝
+        ):
+            calls.write_text("")
+            invoke(script_path, body=body, workspace=workspace, extra_path=str(shim_dir))
+            assert calls.read_text() == "", (script_path, calls.read_text())
+        # 对照：真正执行脚本时必须调用 git，否则上面的断言会因为「根本没用 git」而空洞。
+        calls.write_text("")
+        invoke(".github/probe.sh", body="exit 0\n", workspace=workspace,
+               extra_path=str(shim_dir))
+        assert "status" in calls.read_text(), calls.read_text()
 
         # 执行失败不终止任务，退出码与日志末尾作为不可信数据披露。
         code, prompt = invoke(
