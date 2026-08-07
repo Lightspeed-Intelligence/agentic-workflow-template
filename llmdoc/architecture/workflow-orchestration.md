@@ -90,9 +90,13 @@ directories the calling workflow created inside `repo_dir` — is not attributed
   successful; publisher-only rejection must not suppress fallback.
 - Gitlink add/change/delete and dirty recursive submodule worktrees are never silently truncated into
   a publishable root-repository bundle.
-- Setup-hook artifacts never reach an Agent. Every workflow compares worktree state before and after the
-  hook, right before the Agent runs, and fails on anything the hook added. In `implement`/`update-llmdoc`
-  residue would otherwise be `git add -A`'d into
+- Setup-hook artifacts that produce a new `git status` entry never reach an Agent. Every workflow compares
+  worktree state before and after the hook, right before the Agent runs, and fails on anything the hook
+  added. This is not an absolute guarantee: `llmdoc/reference/workflow-contracts.md` enumerates the cases
+  that escape detection, notably writes inside a folded nested-`.git` directory. Those are bounded by the
+  hook's trust model — owner-maintained configuration, not a security boundary — and the Agent does receive
+  the workspace, so a determined owner-authored hook can still influence it.
+  What the check does prevent: in `implement`/`update-llmdoc` residue would otherwise be `git add -A`'d into
   the candidate commit; in `issue-dispatch` a post-Agent cleanliness assertion would fail both the primary
   and the fallback at the same point, yielding no answer at all; in `question`/`pr-review` the Agent would
   analyse a checkout that has drifted from the pinned SHA.
