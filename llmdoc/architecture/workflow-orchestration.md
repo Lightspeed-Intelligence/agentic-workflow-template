@@ -21,8 +21,10 @@ copying Agent logic.
 2. The reusable workflow narrows authority per job and applies its keyword/draft gate.
 3. A prepare job freezes event data and the consumer source SHA. The relevant Skill and shared runner
    come from an immutable template commit; consumers do not distribute template policy.
-4. Codex runs first without GitHub write credentials. Process, schema or structured soft failure starts
-   Claude Code with `claude-opus-5` from the same fixed input in a fresh runner.
+4. After task inputs are frozen, an optional consumer-declared `setup_script` may prepare language
+   runtimes and dependencies. Codex runs first without GitHub write credentials. Process, schema or
+   structured soft failure starts Claude Code with `claude-opus-5` from the same fixed input in a
+   fresh runner.
 5. Pure-answer workflows transfer validated JSON. Code-writing workflows transfer a single-parent Git
    bundle which a separate read-only job validates before publication.
 6. Only the terminal `answer`, `dispatch`, `implement`, `update` or `review` job may publish. Stable
@@ -52,10 +54,27 @@ contains a candidate bundle or triggers fallback.
 
 ## Immutable Runtime Release
 
-The four workflows use one full template commit SHA for their shared runner, scripts, Skills,
-publisher and notification action. Runtime changes use two commits: first commit the runtime bytes,
-then advance every workflow pin to that commit. `scripts/test-agentic-workflow-contract.py` compares
-each pinned runtime file with the authoring tree so a stale or split pin cannot pass CI.
+All five workflows use one full template commit SHA for their shared runner, scripts, Skills, reviewer
+policy, publisher and notification action. Runtime changes use two commits: first commit the runtime
+bytes, then advance every workflow pin to that commit. `scripts/test-agentic-workflow-contract.py` and
+`scripts/test-pr-review-contract.py` compare each pinned runtime file with the authoring tree so a
+stale or split pin cannot pass CI.
+
+## Environment Setup Hook
+
+Every workflow accepts an optional `setup_script` path. Empty means no-op; a declared path missing from
+the trusted source warns and continues; an existing file runs bounded by the script's own 13-minute
+`timeout`, with a step-level `timeout-minutes: 15` as a wider backstop. The script bounds itself because
+a step-level timeout kills the process tree and would bypass the non-fatal degradation branch.
+
+The script is read from a trusted source — PR base SHA for `pr-review`, the event-pinned consumer
+checkout for the others — so the current change cannot edit the script itself. It still reads
+worktree data, so dependency manifests remain an execution path; the pinned source is not a boundary.
+The step receives no secret because it can export `GITHUB_ENV` to later steps holding the model key.
+
+Runtime failure is non-fatal: exit code and truncated log tail are appended to the prompt as untrusted
+data and the Agent discloses which verification it could not perform. Path-validation failure and a dirty
+worktree after the hook are configuration errors that fail the job, in every workflow.
 
 ## Invariants
 
@@ -69,6 +88,11 @@ each pinned runtime file with the authoring tree so a stale or split pin cannot 
   successful; publisher-only rejection must not suppress fallback.
 - Gitlink add/change/delete and dirty recursive submodule worktrees are never silently truncated into
   a publishable root-repository bundle.
+- Setup-hook artifacts never reach an Agent. Every workflow asserts a clean worktree right after the hook
+  and before the Agent runs. In `implement`/`update-llmdoc` residue would otherwise be `git add -A`'d into
+  the candidate commit; in `issue-dispatch` a post-Agent cleanliness assertion would fail both the primary
+  and the fallback at the same point, yielding no answer at all; in `question`/`pr-review` the Agent would
+  analyse a checkout that has drifted from the pinned SHA.
 - Publisher-owned comments are matched only when both `github-actions[bot]` and the `github-actions`
   App identity agree with the stable marker.
 - Workflow YAML, action YAML and tracked Skills are executable contracts; README/design/llmdoc must follow them.

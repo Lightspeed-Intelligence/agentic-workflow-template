@@ -30,6 +30,9 @@
   private submodules, legacy consumers, provider routing and reusable-workflow reruns.
 - `llmdoc/memory/reflections/codex-first-agentic-workflows.md`: lessons from splitting pure-answer and
   code-writing flows, immutable runtime release, submodule/result contracts and bounded evidence repair.
+- `llmdoc/memory/reflections/consumer-owned-extension-points.md`: lessons from adding a consumer-owned
+  environment-preparation hook — flow-specific blast radius, input freezing, pinned-script limits and
+  configuration-versus-environment failure handling.
 - `llmdoc/memory/doc-gaps.md`: unresolved documentation and automation gaps.
 
 ## Routing Rules

@@ -38,13 +38,18 @@ def git(repo: Path, *args: str) -> str:
     return run(["git", *args], cwd=repo).stdout.strip()
 
 
-def make_repo(root: Path) -> dict[str, str]:
-    repo = root / "repo"
-    repo.mkdir()
+def init_repo(repo: Path) -> Path:
+    """初始化一个不继承作者签名配置的临时仓库，避免签名交互挂住测试。"""
+    repo.mkdir(parents=True, exist_ok=True)
     run(["git", "init", "-q", "-b", "main"], cwd=repo)
     git(repo, "config", "user.name", "Contract Test")
     git(repo, "config", "user.email", "contract@example.invalid")
     git(repo, "config", "commit.gpgsign", "false")
+    return repo
+
+
+def make_repo(root: Path) -> dict[str, str]:
+    repo = init_repo(root / "repo")
 
     tracked = repo / "tracked.txt"
     tracked.write_text("base\n")
@@ -171,6 +176,12 @@ def test_history_selection(repo_info: dict[str, str]) -> None:
                  "full", "prior_review_not_small_increment")
 
 
+def job_block(workflow: str, job: str) -> str:
+    match = re.search(rf"^  {re.escape(job)}:\n(.*?)(?=^  [A-Za-z0-9_-]+:|\Z)", workflow, re.M | re.S)
+    assert match, f"job {job} not found"
+    return match.group(0)
+
+
 def extract_step_run(workflow: str, name: str) -> str:
     lines = workflow.splitlines()
     target = f"      - name: {name}"
@@ -284,6 +295,192 @@ def test_extra_allowed_tools(workflow: str) -> None:
     assert not any(accepts(value) for value in invalid)
 
 
+def test_setup_hook_wiring(workflow: str) -> None:
+    assert workflow.count("setup_script:\n        description:") == 1
+    assert workflow.count('SETUP_SCRIPT: ${{ inputs.setup_script }}') == 2
+    assert workflow.count("timeout-minutes: 15") == 2
+
+    # 必须捕获到下一个步骤（或 job）边界，而不是到第一个空行。YAML 块标量允许内部空行，
+    # 用 `\n\n` 截断会让空行之后的内容逃过本函数的全部断言，例如追加一行把 secret 写入
+    # GITHUB_ENV，或再插一次从 head 工作树读取脚本的 hook 调用。
+    steps = re.findall(
+        r"      - name: Run repository setup script\n(.*?)(?=^      - name: |^  [A-Za-z0-9_-]+:|\Z)",
+        workflow, re.S | re.M,
+    )
+    assert len(steps) == 2, steps
+
+    # 步骤级切片看不到 job 级或 workflow 级 env：那里放一个 secret 同样会被 hook 步骤继承。
+    # 当前两处都没有 env，直接断言其不存在，比逐个排除更简单也更严格。
+    assert not re.search(r"^env:", workflow, re.M), "workflow 级 env 会被 hook 步骤继承"
+    for job in ("codex_review", "claude_review"):
+        block = job_block(workflow, job)
+        header = block.split("    steps:", 1)[0]
+        assert not re.search(r"^    env:", header, re.M), f"{job} 不得声明 job 级 env"
+    for step in steps:
+        # 准备脚本不得收到任何 secret，否则它可以经 GITHUB_ENV 把凭据传给持有模型
+        # 密钥的后续步骤，破坏「Agent 进程不接收 GitHub/PAT 凭据」这条不变量。
+        assert "secrets." not in step, step
+        # 断言完整的参数序列，而不是逐个检查「某字面量出现过」。只查存在性时，把
+        # SOURCE_DIR 与 REPO_DIR 换位仍能通过——两个字面量都还在，但准备脚本会改从
+        # 可被 PR 修改的 head 工作树读取，正是本扩展点的信任基础所要防的。
+        assert re.search(
+            r'bash "\$GITHUB_WORKSPACE/\.trusted-policy/\.github/scripts/agentic/'
+            r'run-setup-hook\.sh" \\\n'
+            r'\s+"\$SETUP_SCRIPT" \\\n'
+            r'\s+"\$GITHUB_WORKSPACE/\.trusted-base" \\\n'
+            r'\s+"\$GITHUB_WORKSPACE" \\\n'
+            r'\s+"\$RUNNER_TEMP/review-prompt\.txt" \\\n'
+            r'\s+review\s*$',
+            step,
+        ), step
+        # 步骤级兜底必须挂在这个步骤上，而不是文件里任意位置。
+        assert "timeout-minutes: 15" in step, step
+
+    # 脚本必须出现在可信策略检出的 sparse-checkout 列表里。少写或写错这一行时 CI 仍然
+    # 通过，但运行时找不到脚本：hook 步骤没有 continue-on-error，Agent job 会直接失败，
+    # 非致命降级设计覆盖不到这种情况，fallback 也会以同样方式失败。
+    assert workflow.count(
+        "sparse-checkout: |\n"
+        "            .claude/skills/pr-review\n"
+        "            .claude/skills/github-comment\n"
+        "            .github/scripts/agentic/run-setup-hook.sh\n"
+    ) == 2
+
+    # 位置必须在审查范围冻结之后：diff/commit 列表已写入 RUNNER_TEMP，准备脚本无法
+    # 再影响审查哪些改动；同时仍在安装 CLI 之前，它写入的 PATH 对 Agent 有效。
+    # 必须逐 job 切片：在整份 workflow 文本上用 str.index 只会命中 codex job 那一处，
+    # claude fallback 的顺序实际不会被检查。
+    for job, cli in (
+        ("codex_review", "Install pinned Codex CLI"),
+        ("claude_review", "Install pinned Claude Code CLI"),
+    ):
+        block = job_block(workflow, job)
+        # 每个位置都独立从块首查找。若用 index(..., prepare_at) 定位 hook，搜索起点就已经
+        # 排除了「hook 在 Prepare 之前」这种要防的错误，断言将永远不会失败。
+        prepare_at = block.index("- name: Prepare trusted review inputs")
+        hook_at = block.index("- name: Run repository setup script")
+        cli_at = block.index(f"- name: {cli}")
+        assert prepare_at < hook_at < cli_at, (job, cli)
+
+
+def test_setup_hook_behavior() -> None:
+    hook = ROOT / ".github/scripts/agentic/run-setup-hook.sh"
+    run(["bash", "-n", str(hook)])
+
+    def invoke(script_path: str, *, mode: str = "review", body: str | None = None,
+               workspace: Path) -> tuple[int, str]:
+        source = workspace / "consumer"
+        (source / ".github").mkdir(parents=True, exist_ok=True)
+        if body is not None:
+            target = source / script_path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(body)
+            # 提交脚本本身：洁净检查现在覆盖 review 模式，未跟踪的脚本文件会被算作
+            # 准备脚本弄脏了工作树。真实用法中脚本来自可信 checkout，本就是已跟踪内容。
+            git(source, "add", "-A")
+            git(source, "commit", "-qm", f"add {script_path}")
+        prompt = workspace / "prompt.txt"
+        prompt.write_text("base prompt\n")
+        runner_temp = workspace / "runner"
+        runner_temp.mkdir(exist_ok=True)
+        env = os.environ.copy()
+        env["RUNNER_TEMP"] = str(runner_temp)
+        result = run(
+            ["bash", str(hook), script_path, str(source), str(source), str(prompt), mode],
+            env=env, check=False,
+        )
+        return result.returncode, prompt.read_text()
+
+    with tempfile.TemporaryDirectory(prefix="setup-hook-") as tmp_name:
+        workspace = Path(tmp_name)
+        init_repo(workspace / "consumer")
+
+        # 空输入不执行任何内容，也不改动提示词。
+        code, prompt = invoke("", workspace=workspace)
+        assert code == 0 and prompt == "base prompt\n"
+
+        # 声明了路径但文件缺失：警告后继续，并向 Agent 披露未执行。
+        code, prompt = invoke(".github/missing.sh", workspace=workspace)
+        assert code == 0 and "未执行任何准备步骤" in prompt
+
+        # 执行成功：披露环境已就绪。
+        code, prompt = invoke(".github/ok.sh", body="exit 0\n", workspace=workspace)
+        assert code == 0 and "已成功执行" in prompt
+
+        # 执行失败不终止任务，退出码与日志末尾作为不可信数据披露。
+        code, prompt = invoke(
+            ".github/bad.sh", body='echo "boom detail"\nexit 7\n', workspace=workspace,
+        )
+        assert code == 0, prompt
+        assert "退出码 7" in prompt and "boom detail" in prompt
+        assert "不可信数据" in prompt
+
+        # 路径校验：拒绝绝对路径、路径遍历、命令注入与空格。
+        for bad_path in (
+            "/etc/passwd", "../escape.sh", ".github/../x.sh", ".github/./x.sh",
+            ".github//x.sh", "x.sh;whoami", "$(whoami).sh", "a b.sh", ".github/x.sh\nrm -rf /",
+            # 只含换行的用例：上面那个值同时含 `/` 与空格，会被字符集分支拦下，因此
+            # 无法单独证明换行拒绝分支存在。这两个值只违反换行规则。
+            "setup.sh\nsetup.sh", "setup.sh\rsetup.sh",
+        ):
+            code, prompt = invoke(bad_path, workspace=workspace)
+            assert code == 1, bad_path
+            assert prompt == "base prompt\n", bad_path
+
+        # 非法 mode 是调用方错误。
+        code, _ = invoke(".github/ok.sh", mode="bogus", workspace=workspace)
+        assert code == 2
+
+    # change 模式在准备脚本之后强制工作树洁净：留下的改动会被 git add -A 静默打包。
+    with tempfile.TemporaryDirectory(prefix="setup-hook-change-") as tmp_name:
+        workspace = Path(tmp_name)
+        source = init_repo(workspace / "consumer")
+        (source / ".github").mkdir(parents=True)
+        (source / "tracked.txt").write_text("base\n")
+        (source / ".gitignore").write_text("build/\n")
+
+        # 三个准备脚本都必须先被跟踪并提交，否则它们自身就是工作树里的干扰噪声。
+        cases = {
+            "ignored": "mkdir -p build && echo out > build/artifact\n",
+            "tracked": "echo polluted >> tracked.txt\n",
+            "untracked": "echo new > untracked-artifact.txt\n",
+        }
+        for name, body in cases.items():
+            (source / f".github/setup-{name}.sh").write_text(body)
+        git(source, "add", "-A")
+        git(source, "commit", "-qm", "base")
+
+        def run_mode(name: str, mode: str) -> int:
+            # prompt 与 RUNNER_TEMP 必须落在仓库之外：真实 runner 上它们在 $RUNNER_TEMP
+            # 里，放进仓库会让洁净检查把测试脚手架本身算作准备脚本的产物。
+            scratch = workspace / "scratch"
+            scratch.mkdir(exist_ok=True)
+            prompt = scratch / "prompt.txt"
+            prompt.write_text("base prompt\n")
+            env = os.environ.copy()
+            env["RUNNER_TEMP"] = str(scratch)
+            code = run(
+                ["bash", str(hook), f".github/setup-{name}.sh", str(source), str(source),
+                 str(prompt), mode],
+                env=env, check=False,
+            ).returncode
+            # 复位工作树，让每个用例从同一状态开始。
+            git(source, "checkout", "-q", "--", ".")
+            git(source, "clean", "-qfd")
+            return code
+
+        # 两种模式行为一致。review 模式同样不能放过残留：issue-dispatch 在 Agent 之后
+        # 断言工作树完全干净，残留会让主链路与 fallback 在同一处失败；question 与
+        # pr-review 则会让 Agent 基于已偏离固定 SHA 的 checkout 工作。
+        for mode in ("change", "review"):
+            # 被 gitignore 覆盖的产物是允许的。
+            assert run_mode("ignored", mode) == 0, mode
+            # 改动已跟踪文件会被拒绝。
+            assert run_mode("tracked", mode) == 1, mode
+            # 产生未被忽略的新文件同样被拒绝。
+            assert run_mode("untracked", mode) == 1, mode
+
+
 def test_model_secret_routing(workflow: str, caller: str) -> None:
     pr_caller_match = re.search(r'^  pr-review:\n(.*)\Z', caller, re.MULTILINE | re.DOTALL)
     assert pr_caller_match, "pr-review caller job not found"
@@ -324,24 +521,115 @@ def test_checkout_credentials(workflow: str, caller: str) -> None:
 
 
 def test_trusted_policy_source(workflow: str) -> None:
-    policy_sha = "e00fbc64c624c15f89a037bee7011d98693c3406"
-    assert workflow.count("repository: Lightspeed-Intelligence/agentic-workflow-template") == 2
-    assert workflow.count(f"ref: {policy_sha}") == 2
+    # 策略与共享运行时来自同一个模板固定版本；该版本号也被 agentic 契约测试逐字节校验。
+    refs = re.findall(
+        r"repository: Lightspeed-Intelligence/agentic-workflow-template\n\s+ref: ([^\s#]+)",
+        workflow,
+    )
+    assert len(refs) == 2, refs
+    assert len(set(refs)) == 1, refs
+    policy_sha = refs[0]
+    assert re.fullmatch(r"[0-9a-f]{40}", policy_sha), policy_sha
     assert workflow.count("path: .trusted-policy") == 2
     assert workflow.count(".trusted-policy/.claude/skills/pr-review/SKILL.md") == 2
     assert "review-sop.md" not in workflow
     assert "output-format.md" not in workflow
     assert ".trusted-base/.claude/skills/" not in workflow
-    assert workflow.count("sparse-checkout: .github/scripts/pr-review/prepare-review-history.sh") == 2
+
+    # 历史准备脚本与可选的环境准备脚本都来自 base commit 的稀疏检出。
+    assert workflow.count(
+        "sparse-checkout: |\n"
+        "            .github/scripts/pr-review/prepare-review-history.sh\n"
+        "            ${{ inputs.setup_script }}\n"
+    ) == 2
+
+    for relative in (
+        ".claude/skills/pr-review/SKILL.md",
+        ".claude/skills/github-comment/SKILL.md",
+        ".github/scripts/agentic/run-setup-hook.sh",
+    ):
+        pinned = run(["git", "show", f"{policy_sha}:{relative}"], cwd=ROOT).stdout
+        assert pinned == (ROOT / relative).read_text(), f"policy pin is stale for {relative}"
+
+    # 文档不得复制可能变陈旧的 SHA 字面量。此前 pr-review-contract.md 硬编码了旧的
+    # policy SHA，而唯一引用它的测试改为正则提取后，这条字面量失去了任何自动检查。
+    # 用 glob 覆盖 docs/ 与 llmdoc/ 全部 Markdown，新增文件自动纳入。
+    docs = [ROOT / "README.md", *sorted((ROOT / "docs").rglob("*.md"))]
+    for doc in docs:
+        assert not re.search(r"\b[0-9a-f]{40}\b", doc.read_text()), str(doc.relative_to(ROOT))
+    for doc in sorted((ROOT / "llmdoc").rglob("*.md")):
+        stale = [
+            sha for sha in re.findall(r"\b[0-9a-f]{40}\b", doc.read_text())
+            if sha != policy_sha
+        ]
+        assert not stale, (str(doc.relative_to(ROOT)), stale)
+
+    # 准备脚本的自限时默认值被五处文档引用，必须与脚本实际值一致，否则会像 SHA 字面量
+    # 一样悄悄漂移。
+    hook = (ROOT / ".github/scripts/agentic/run-setup-hook.sh").read_text()
+    default_timeout = re.search(r'\$\{SETUP_HOOK_TIMEOUT:-([0-9]+[smh])\}', hook)
+    assert default_timeout, "run-setup-hook.sh 必须为自限时提供默认值"
+    timeout_value = default_timeout.group(1)
+    minutes = timeout_value.removesuffix("m")
+    for doc in (
+        ROOT / "README.md",
+        ROOT / "llmdoc/reference/pr-review-contract.md",
+        ROOT / "llmdoc/reference/workflow-contracts.md",
+        ROOT / "llmdoc/architecture/pr-review-trust-boundary.md",
+        ROOT / "llmdoc/architecture/workflow-orchestration.md",
+    ):
+        text = doc.read_text()
+        assert f"{minutes}m" in text or f"{minutes}-minute" in text or f"{minutes} 分钟" in text, (
+            str(doc.relative_to(ROOT)), timeout_value,
+        )
+        # 旧的「步骤级 15 分钟即上限」表述不得残留，否则与自限时模型矛盾。
+        assert "fixed 15-minute step timeout" not in text, str(doc.relative_to(ROOT))
+        assert "15-minute step, non-fatal" not in text, str(doc.relative_to(ROOT))
+
+    # 步骤级兜底与 job 级超时的数字同样会漂移，一并与 workflow 实际值绑定。
+    step_backstop = re.search(r"^        timeout-minutes: (\d+)$", workflow, re.M)
+    assert step_backstop, "hook 步骤必须声明 timeout-minutes"
+    job_timeout = re.search(r"^    timeout-minutes: (\d+)$", workflow, re.M)
+    assert job_timeout, "reviewer job 必须声明 timeout-minutes"
+    for doc in (
+        ROOT / "README.md",
+        ROOT / "llmdoc/reference/pr-review-contract.md",
+        ROOT / "llmdoc/reference/workflow-contracts.md",
+        ROOT / "llmdoc/architecture/pr-review-trust-boundary.md",
+        ROOT / "llmdoc/architecture/workflow-orchestration.md",
+    ):
+        text = doc.read_text()
+        if "timeout-minutes" in text:
+            assert f"timeout-minutes: {step_backstop.group(1)}" in text, (
+                str(doc.relative_to(ROOT)), step_backstop.group(1),
+            )
+    contract_doc = (ROOT / "llmdoc/reference/pr-review-contract.md").read_text()
+    assert f"{job_timeout.group(1)} minutes" in contract_doc, job_timeout.group(1)
 
     policy_files = run([
         "git", "ls-tree", "-r", "--name-only", policy_sha, "--", ".claude/skills/pr-review",
     ], cwd=ROOT).stdout.splitlines()
     assert policy_files == [".claude/skills/pr-review/SKILL.md"]
-    pinned_skill = run([
-        "git", "show", f"{policy_sha}:.claude/skills/pr-review/SKILL.md",
-    ], cwd=ROOT).stdout
-    assert pinned_skill == (ROOT / ".claude/skills/pr-review/SKILL.md").read_text()
+
+    # 五个 workflow 必须共用同一个版本号。此前两个 harness 各自只读自己那几个 workflow，
+    # 没有任何检查会发现 pr-review 被单独重新 pin 到另一个真实 commit（split pin）。
+    # 两种键序都要覆盖：只匹配 repository 在前的写法时，调换 with: 下的键序即可绕过。
+    # 这里不引入 PyYAML，因为两个 harness 目前都只依赖标准库，CI 也不安装额外依赖。
+    template_repo = "repository: Lightspeed-Intelligence/agentic-workflow-template"
+    all_refs: set[str] = set()
+    for name in (
+        "pr-review", "question", "issue-dispatch", "implement", "update-llmdoc",
+    ):
+        text = (ROOT / f".github/workflows/{name}.yml").read_text()
+        refs = [
+            *re.findall(rf"{re.escape(template_repo)}\n\s+ref: ([^\s#]+)", text),
+            *re.findall(rf"ref: ([^\s#]+)\n\s+{re.escape(template_repo)}", text),
+        ]
+        # 每个引用模板仓库的 checkout 都必须带 ref，否则会隐式取默认分支。
+        assert len(refs) == text.count(template_repo), (name, refs)
+        assert refs, name
+        all_refs.update(refs)
+    assert all_refs == {policy_sha}, all_refs
 
 
 def test_prepare_script_selection(workflow: str, repo_info: dict[str, str]) -> None:
@@ -407,6 +695,8 @@ def main() -> None:
     test_schemas(workflow)
     test_publisher_gate(workflow)
     test_extra_allowed_tools(workflow)
+    test_setup_hook_wiring(workflow)
+    test_setup_hook_behavior()
     test_model_secret_routing(workflow, caller)
     test_model_names(workflow, readme, question_workflow)
     test_checkout_credentials(workflow, caller)

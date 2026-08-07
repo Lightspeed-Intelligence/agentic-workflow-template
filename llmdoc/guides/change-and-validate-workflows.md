@@ -64,6 +64,11 @@ Also:
 - assert policy provenance and credential scope: PR-head checkout alone may use the PAT fallback,
   while consumer-base and template-policy checkouts use the read-only job token;
 - exercise `review_status` COMPLETE/INCOMPLETE soft-failure fixtures and `extra_allowed_tools` valid/write/traversal/injection fixtures;
+- exercise `setup_script` empty/missing/success/failure fixtures plus absolute, traversal, injection and
+  whitespace path rejection; assert no hook step carries a `secrets.` value; in every mode assert an
+  ignored artifact passes while a tracked-file change or unignored artifact fails;
+- initialize contract fixture repositories with `commit.gpgsign=false`: inherited signing configuration
+  makes `git commit` block on an interactive key prompt and the harness hangs instead of failing;
 - exercise history-state fixtures for trusted/untrusted author, malformed marker, stale/current/non-ancestor SHA,
   0/1/3/4 suggestions and any critical/important count; all invalid cases must select full review;
 - verify documentation examples satisfy the same executable truth table.
@@ -130,6 +135,34 @@ repeatedly clicking **Re-run jobs** cannot validate the newly merged workflow.
   required fields, causing a publisher failure instead of primary fallback.
 - Accepting `NO_CHANGES` before proving that root, untracked and recursive-submodule state is clean.
 - Advancing only some immutable runtime refs or pinning them before the runtime commit exists.
+- Adding an owner-maintained preparation step to a code-writing flow without asserting a clean worktree
+  afterwards: `package-change-result.sh` runs `git add -A`, so a tracked lockfile update or an unignored
+  artifact silently becomes part of the candidate commit.
+- Promising graceful degradation from a failure the degrading code cannot observe. A step-level
+  `timeout-minutes` expiry kills the process tree, so an in-script exit-code branch never runs; bound
+  long-running consumer code with `timeout` inside the script and keep the step timeout as a backstop.
+- Duplicating a pinned SHA as a documentation literal, or relaxing an exact-literal assertion to a
+  pattern without checking what that literal was incidentally protecting.
+- Asserting on one workflow when the public contract claims the behavior for several.
+- Guarding one invariant with two checks that define "dirty" differently.
+- Locating a step position with `str.index` over a whole workflow file when Codex and Claude jobs share
+  step names: the search always returns the primary job's match and the fallback is never checked.
+- Deriving one operand of an ordering assertion from the other, such as
+  `block.index(hook, prepare_at)`. When the needle is unique in the block this raises `ValueError`
+  instead of passing, so it fails loudly — but the guarantee rests on that uniqueness. Locate each
+  position independently and compare absolute offsets so a second occurrence cannot reintroduce a blind
+  spot.
+- Claiming a cross-file invariant (for example "no split pin") without a check that reads across those
+  files. Verify each ordering or containment assertion by breaking it in every direction it should catch.
+- Asserting that each argument literal appears somewhere in a step instead of asserting the argument
+  sequence. Swapping two path operands keeps every literal present while inverting the meaning — for the
+  setup hook that silently moves the script source from the trusted checkout to the PR head worktree.
+  Also anchor step-level settings such as `timeout-minutes` inside the step block, not by file-wide count.
+- Describing a base-pinned script as preventing PR-driven code execution. The script is pinned but its
+  input is not: dependency manifests from the working tree still execute during installation.
+- Resolving a hook path relative to the caller's directory when the runner will `cd` elsewhere before
+  executing it. Convert to an absolute path at validation time.
+- Writing a fixture whose setup step itself dirties the worktree it is about to assert on.
 
 ## Related Docs
 

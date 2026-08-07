@@ -457,6 +457,107 @@ def test_closes_is_publisher_owned() -> None:
     assert publisher.count("Closes #%s") == 1
 
 
+def test_setup_hook_wiring() -> None:
+    # 写代码链路必须用 change 模式，它会在准备脚本之后强制工作树洁净，避免准备产物
+    # 被 package-change-result.sh 的 git add -A 静默打包进候选提交。
+    expected_mode = {
+        "question": "review",
+        "issue-dispatch": "review",
+        "implement": "change",
+        "update-llmdoc": "change",
+    }
+    for name, path in WORKFLOWS.items():
+        text = path.read_text()
+        assert text.count("setup_script:\n        description:") == 1, name
+        assert text.count("SETUP_SCRIPT: ${{ inputs.setup_script }}") == 2, name
+
+        # 捕获到下一个步骤（或 job）边界，而不是到第一个空行：YAML 块标量允许内部空行，
+        # `\n\n` 截断会让空行之后的内容逃过本函数的全部断言。
+        steps = re.findall(
+            r"      - name: Run repository setup script\n(.*?)"
+            r"(?=^      - name: |^  [A-Za-z0-9_-]+:|\Z)",
+            text, re.S | re.M,
+        )
+        assert len(steps) == 2, name
+
+        # 步骤级切片看不到 job 级或 workflow 级 env：那里放一个 secret 同样会被 hook
+        # 步骤继承。当前所有 workflow 都没有 env，直接断言其不存在。
+        assert not re.search(r"^env:", text, re.M), name
+        for job in re.findall(r"^  ([A-Za-z0-9_-]+):$", text, re.M):
+            block = job_block(text, job)
+            if "- name: Run repository setup script" not in block:
+                continue
+            header = block.split("    steps:", 1)[0]
+            assert not re.search(r"^    env:", header, re.M), (name, job)
+        for step in steps:
+            # 准备脚本不得收到任何 secret：它能写 GITHUB_ENV，从而把凭据泄漏给持有
+            # 模型密钥的后续步骤，破坏「Agent 进程不接收 GitHub/PAT 凭据」不变量。
+            assert "secrets." not in step, (name, step)
+            # 步骤级兜底必须挂在这个步骤上，而不是文件里任意位置。
+            assert "timeout-minutes: 15" in step, name
+            # 断言完整参数序列。只查存在性时，把 SOURCE_DIR 与 REPO_DIR 换位、或给
+            # PROMPT_FILE 换成不会被读取的路径，都能通过而语义已被改坏。
+            assert re.search(
+                r'bash runtime/\.github/scripts/agentic/run-setup-hook\.sh \\\n'
+                r'\s+"\$SETUP_SCRIPT" \\\n'
+                r'\s+"\$GITHUB_WORKSPACE/consumer" \\\n'
+                r'\s+"\$GITHUB_WORKSPACE/consumer" \\\n'
+                r'\s+"\$RUNNER_TEMP/prompt\.txt" \\\n'
+                rf'\s+{expected_mode[name]}\s*$',
+                step,
+            ), (name, step)
+
+        # 位置必须在任务输入冻结之后、Agent 启动之前。必须逐 job 切片后再比较位置：
+        # 在整份 workflow 文本上用 str.index 只会命中主链路那一处，fallback job 的顺序
+        # 实际不会被检查。
+        primary, fallback = {
+            "question": ("codex_answer", "claude_answer"),
+            "issue-dispatch": ("codex_analyze", "claude_analyze"),
+            "implement": ("codex_candidate", "claude_candidate"),
+            "update-llmdoc": ("codex_candidate", "claude_candidate"),
+        }[name]
+        for job in (primary, fallback):
+            block = job_block(text, job)
+            agent_steps = re.findall(
+                r"      - name: ((?:Answer|Analyze|Implement|Update llmdoc) with [^\n]+)", block,
+            )
+            assert agent_steps, (name, job)
+            # 每个位置都独立从块首查找。若用 index(..., contract_at) 定位 hook，搜索起点
+            # 就已经排除了「hook 在 Prepare 之前」这种要防的错误，断言将永远不会失败。
+            contract_at = block.index("- name: Prepare")
+            hook_at = block.index("- name: Run repository setup script")
+            assert contract_at < hook_at, (name, job, "hook must run after inputs are frozen")
+            for agent_step in agent_steps:
+                agent_at = block.index(f"- name: {agent_step}")
+                assert hook_at < agent_at, (name, job, agent_step)
+
+    # 每个运行 hook 的 job 都必须检出脚本所在目录。少写或写错时 CI 仍然通过，但运行时
+    # 找不到脚本：hook 步骤没有 continue-on-error，Agent job 会直接失败，非致命降级设计
+    # 覆盖不到这种情况。
+    for name, path in WORKFLOWS.items():
+        text = path.read_text()
+        hook_jobs = [
+            job for job in re.findall(r"^  ([A-Za-z0-9_-]+):$", text, re.M)
+            if "- name: Run repository setup script" in job_block(text, job)
+        ]
+        assert len(hook_jobs) == 2, (name, hook_jobs)
+        for job in hook_jobs:
+            block = job_block(text, job)
+            assert "            .github/scripts/agentic\n" in block, (name, job)
+
+    # 两条写代码链路的提示词都要引导 Agent 在无法验证时选择 BLOCKED，而不是推出未验证
+    # 的改动。公开文档同时宣称 implement 与 update-llmdoc 都有这条指引，因此两者都断言。
+    for name in ("implement", "update-llmdoc"):
+        text = WORKFLOWS[name].read_text()
+        assert text.count("倾向输出 BLOCKED") == 2, name
+
+    # 步骤级 timeout-minutes 到期时 runner 直接杀掉进程树并判定步骤失败，脚本的降级分支
+    # 不会执行。脚本必须自行用 timeout 限时，才能让超时变成可披露的非零退出码。
+    hook = (SCRIPTS / "run-setup-hook.sh").read_text()
+    assert "timeout --signal=TERM" in hook
+    assert "-eq 124" in hook, "必须识别 GNU timeout 的超时退出码"
+
+
 def test_runtime_is_immutable() -> None:
     all_refs: set[str] = set()
     for path in WORKFLOWS.values():
@@ -501,6 +602,7 @@ def main() -> None:
     test_untrusted_text_is_not_shell_source()
     test_change_artifact_scripts()
     test_closes_is_publisher_owned()
+    test_setup_hook_wiring()
     test_runtime_is_immutable()
     print("agentic workflow contract fixtures passed")
 
