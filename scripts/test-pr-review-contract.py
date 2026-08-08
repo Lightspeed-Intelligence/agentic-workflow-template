@@ -368,7 +368,7 @@ def test_setup_hook_behavior() -> None:
     run(["bash", "-n", str(hook)])
 
     def invoke(script_path: str, *, mode: str = "review", body: str | None = None,
-               workspace: Path) -> tuple[int, str]:
+               workspace: Path, extra_path: str | None = None) -> tuple[int, str]:
         source = workspace / "consumer"
         (source / ".github").mkdir(parents=True, exist_ok=True)
         if body is not None:
@@ -385,6 +385,8 @@ def test_setup_hook_behavior() -> None:
         runner_temp.mkdir(exist_ok=True)
         env = os.environ.copy()
         env["RUNNER_TEMP"] = str(runner_temp)
+        if extra_path:
+            env["PATH"] = f"{extra_path}:{env['PATH']}"
         result = run(
             ["bash", str(hook), script_path, str(source), str(source), str(prompt), mode],
             env=env, check=False,
@@ -406,6 +408,30 @@ def test_setup_hook_behavior() -> None:
         # 执行成功：披露环境已就绪。
         code, prompt = invoke(".github/ok.sh", body="exit 0\n", workspace=workspace)
         assert code == 0 and "已成功执行" in prompt
+
+        # 提前返回的分支不得执行任何 git 命令。基线采集本身有副作用与失败模式：消费仓库
+        # 若存在 .gitmodules 缺条目的 gitlink，submodule foreach 会以 128 退出，把「本仓库
+        # 没声明 setup_script」变成 job 失败。用假 git 记录调用，而不是只看退出码——只看
+        # 退出码时，把采集移回脚本顶部仍能通过。
+        shim_dir = workspace / "shim"
+        shim_dir.mkdir(exist_ok=True)
+        calls = workspace / "git-calls.txt"
+        shim = shim_dir / "git"
+        shim.write_text(f'#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "{calls}"\nexit 0\n')
+        shim.chmod(0o755)
+        for script_path, body in (
+            ("", None),                       # 未声明
+            (".github/missing.sh", None),     # 声明但可信来源中不存在
+            ("/etc/passwd", None),            # 路径校验拒绝
+        ):
+            calls.write_text("")
+            invoke(script_path, body=body, workspace=workspace, extra_path=str(shim_dir))
+            assert calls.read_text() == "", (script_path, calls.read_text())
+        # 对照：真正执行脚本时必须调用 git，否则上面的断言会因为「根本没用 git」而空洞。
+        calls.write_text("")
+        invoke(".github/probe.sh", body="exit 0\n", workspace=workspace,
+               extra_path=str(shim_dir))
+        assert "status" in calls.read_text(), calls.read_text()
 
         # 执行失败不终止任务，退出码与日志末尾作为不可信数据披露。
         code, prompt = invoke(
@@ -450,7 +476,16 @@ def test_setup_hook_behavior() -> None:
         git(source, "add", "-A")
         git(source, "commit", "-qm", "base")
 
+        # 由调用方登记「workflow 自己创建的目录」。复位会用 git clean 删掉未跟踪内容，
+        # 因此每次运行前都要重新预置，否则只有第一次调用能看到它们，后续用例（包括
+        # review 模式那一支）实际上没有被守护。
+        workflow_owned: dict[str, str] = {}
+
         def run_mode(name: str, mode: str) -> int:
+            for path, content in workflow_owned.items():
+                target = source / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content)
             # prompt 与 RUNNER_TEMP 必须落在仓库之外：真实 runner 上它们在 $RUNNER_TEMP
             # 里，放进仓库会让洁净检查把测试脚手架本身算作准备脚本的产物。
             scratch = workspace / "scratch"
@@ -479,6 +514,116 @@ def test_setup_hook_behavior() -> None:
             assert run_mode("tracked", mode) == 1, mode
             # 产生未被忽略的新文件同样被拒绝。
             assert run_mode("untracked", mode) == 1, mode
+
+        # 报错文案只能陈述已确证的事实。issue #31 的教训正是硬编码未经确证的原因会把排查
+        # 方向引偏，因此这里断言四种组合各自的措辞：
+        #   - 脚本成功 vs 以非零码结束（后者不得暗示「成功后留下产物」）
+        #   - 新增未跟踪文件（.gitignore 可解决）vs 改动/删除已跟踪内容（无法解决）
+        msg_cases = {
+            "msg-untracked": ("echo x > new.txt\n", False, True),
+            "msg-deleted": ("rm -f tracked.txt\n", False, False),
+            "msg-failnew": ("echo x > new.txt\nexit 7\n", True, True),
+            "msg-faildel": ("rm -f tracked.txt\nexit 7\n", True, False),
+        }
+        for name, (body, _failed, _untracked) in msg_cases.items():
+            (source / f".github/setup-{name}.sh").write_text(body)
+        git(source, "add", "-A")
+        git(source, "commit", "-qm", "message-wording cases")
+        for name, (_body, failed, untracked) in msg_cases.items():
+            for path, content in workflow_owned.items():
+                target = source / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content)
+            scratch = workspace / "scratch"
+            scratch.mkdir(exist_ok=True)
+            prompt = scratch / "prompt.txt"
+            prompt.write_text("base prompt\n")
+            env = os.environ.copy()
+            env["RUNNER_TEMP"] = str(scratch)
+            result = run(
+                ["bash", str(hook), f".github/setup-{name}.sh", str(source), str(source),
+                 str(prompt), "review"],
+                env=env, check=False,
+            )
+            assert result.returncode == 1, (name, result.stdout, result.stderr)
+            out = result.stdout + result.stderr
+            # 失败路径必须报出退出码，成功路径不得声称脚本失败。
+            assert ("以退出码" in out and "并改动了工作树" in out) == failed, (name, out)
+            # .gitignore 建议只对 ?? 条目给出。
+            assert (".gitignore 覆盖" in out) == untracked, (name, out)
+            assert (".gitignore 无法解决" in out) == (not untracked), (name, out)
+            git(source, "checkout", "-q", "--", ".")
+            git(source, "clean", "-qfd")
+
+        # 回归 issue #31：pr-review 把 .trusted-base / .trusted-policy checkout 到
+        # $GITHUB_WORKSPACE，又以同一目录作为 repo_dir。这些目录在准备脚本运行前就存在，
+        # 属于 workflow 实现细节，不得被算作准备脚本的产物——否则只要声明 setup_script
+        # 就必然失败，且报错指向错误的原因。
+        workflow_owned.update({
+            ".trusted-base/.github/x": "workflow-owned\n",
+            ".trusted-policy/.claude/marker": "workflow-owned\n",
+        })
+        # 真实布局里 actions/checkout 带 path: 会在这些目录内留下嵌套 .git，porcelain 因此
+        # 把整个目录折叠成一行。fixture 必须复现这一点，否则测到的是比真实情况更宽松的形态。
+        for trusted in (".trusted-base", ".trusted-policy"):
+            nested = source / trusted
+            nested.mkdir(parents=True, exist_ok=True)
+            if not (nested / ".git").exists():
+                run(["git", "init", "-q"], cwd=nested)
+        folded = git(source, "status", "--porcelain", "--untracked-files=all")
+        assert "?? .trusted-base/\n" in folded + "\n", folded
+        assert "?? .trusted-policy/\n" in folded + "\n", folded
+        for mode in ("change", "review"):
+            assert run_mode("ignored", mode) == 0, (mode, "trusted dirs must not be blamed")
+            # 真实污染仍须被拒绝，预存的未跟踪目录不得成为普遍豁免。
+            assert run_mode("tracked", mode) == 1, mode
+            assert run_mode("untracked", mode) == 1, mode
+
+        # 豁免的依据是「基线中已存在的状态条目」，不是「路径名匹配」。两个用例：
+        #
+        # 1) 一个 .trusted 前缀的旁路目录，证明前缀本身不构成豁免；
+        # 2) 真正的 .trusted-base 目录内的已跟踪文件——按名字排除会漏掉它，这正是 issue #31
+        #    提醒的副作用。该目录一旦持有索引条目就不再折叠，因此这个用例不会退化成测折叠。
+        # 折叠只在目录不含索引条目时发生，因此这两个用例用一个独立仓库：上面的 fixture 已经
+        # 在 .trusted-base 内建好嵌套 .git 并断言了折叠形态，无法在同一棵树里同时表达两种。
+        with tempfile.TemporaryDirectory(prefix="setup-hook-named-") as named_name:
+            named_ws = Path(named_name)
+            named = init_repo(named_ws / "consumer")
+            (named / ".github").mkdir(parents=True, exist_ok=True)
+            for rel, script in (
+                (".trusted-sidecar/consumer-owned.txt", "setup-trusted-tracked"),
+                (".trusted-base/consumer-owned.txt", "setup-trusted-inside"),
+            ):
+                target = named / rel
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("real\n")
+                (named / f".github/{script}.sh").write_text(f"echo polluted >> {rel}\n")
+            git(named, "add", "-A")
+            git(named, "commit", "-qm", "consumer tracks files under .trusted paths")
+            # 先有索引条目，再制造嵌套 .git：该目录因此不折叠，其中已跟踪文件的改动会产生
+            # ` M` 行。按名字排除 .trusted-base 会漏掉它，这正是 issue #31 提醒的副作用。
+            run(["git", "init", "-q"], cwd=named / ".trusted-base")
+            status = git(named, "status", "--porcelain", "--untracked-files=all")
+            assert "?? .trusted-base/\n" not in status + "\n", status
+
+            def run_named(script: str, mode: str) -> int:
+                scratch = named_ws / "scratch"
+                scratch.mkdir(exist_ok=True)
+                prompt = scratch / "prompt.txt"
+                prompt.write_text("base prompt\n")
+                env = os.environ.copy()
+                env["RUNNER_TEMP"] = str(scratch)
+                code = run(
+                    ["bash", str(hook), f".github/{script}.sh", str(named), str(named),
+                     str(prompt), mode],
+                    env=env, check=False,
+                ).returncode
+                git(named, "checkout", "-q", "--", ".")
+                return code
+
+            for mode in ("change", "review"):
+                assert run_named("setup-trusted-tracked", mode) == 1, (mode, "prefix no exemption")
+                assert run_named("setup-trusted-inside", mode) == 1, (mode, "tracked inside must fail")
 
 
 def test_model_secret_routing(workflow: str, caller: str) -> None:

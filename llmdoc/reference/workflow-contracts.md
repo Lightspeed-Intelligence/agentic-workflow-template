@@ -68,9 +68,39 @@ a wider backstop) with no secret in its environment.
 `pr-review` reads it from the PR base SHA through `.trusted-base`; the other four read it from the
 event-pinned consumer checkout. Runtime failure appends the exit code and truncated log tail to the
 prompt as untrusted data and does not fail the job or change `INCOMPLETE`/`READY` validation.
-Path-validation failure fails the job. Every workflow requires a clean worktree after the hook, so setup
-artifacts must be gitignored; `implement` and `update-llmdoc` additionally steer the Agent toward
-`BLOCKED` when preparation prevented verification.
+Path-validation failure fails the job. Every workflow rejects dirty state the hook itself introduced, so
+setup artifacts must be gitignored. The check diffs `git status` porcelain lines against a baseline taken
+just before the hook runs, so a calling workflow's own directories inside `repo_dir` (`pr-review`'s
+`.trusted-base`/`.trusted-policy`) are not blamed on the hook. Exemption is by status line, not by path
+name: a modification to a consumer-**tracked** file under those same paths still fails.
+
+The baseline is captured only after the hook is known to exist, so a repository that leaves `setup_script`
+empty runs no `git` command at all — otherwise an unrelated unusable gitlink would fail a job that does not
+use the feature.
+
+Known limits, all bounded by the same trust model as the rest of the hook — owner-maintained configuration,
+not a security boundary.
+
+Inherent to `git status` porcelain:
+
+- A directory containing a nested `.git` is reported as a single folded entry (`?? .trusted-policy/`).
+  Anything the hook adds, deletes or rewrites **inside** such a directory produces no new porcelain line and
+  is therefore undetected. This is the live case in `pr-review`, because `actions/checkout` with `path:`
+  creates that nested `.git`. Folding stops if the directory also holds index entries.
+- A porcelain line does not encode content, so rewriting a file that was already listed — untracked
+  individually, or tracked but already modified — yields the same line and is undetected.
+
+Inherent to the baseline comparison itself:
+
+- Only *added* status entries are reported, so a hook that **deletes** an entry present in the baseline is
+  not reported. In a fresh checkout the only such entries are the calling workflow's own directories.
+  Deleting a consumer-**tracked** file still produces a new ` D` line and fails.
+
+What remains guarded: any change that produces a *new* status entry, including modification of a
+consumer-tracked file anywhere in the tree (exemption keys on status lines, not path names).
+
+`implement` and `update-llmdoc` additionally steer the Agent toward `BLOCKED` when preparation prevented
+verification.
 
 ## Submodules
 

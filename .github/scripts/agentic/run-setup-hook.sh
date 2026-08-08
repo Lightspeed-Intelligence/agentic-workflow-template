@@ -28,7 +28,29 @@ case "$mode" in
     ;;
 esac
 
-# 所有模式都要求准备脚本执行后工作树保持洁净。
+# 口径与 package-change-result.sh 保持一致：--ignore-submodules=none 覆盖消费仓库把
+# submodule.<name>.ignore 设为 all 的情况，递归 foreach 捕获 submodule 内部的脏状态。
+worktree_status() {
+  git -C "$repo_dir" status --porcelain --untracked-files=all --ignore-submodules=none
+  git -C "$repo_dir" submodule foreach --quiet --recursive '
+    if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
+      printf "dirty submodule: %s\n" "$displaypath"
+    fi
+  '
+}
+
+# 在执行准备脚本之前记录基线。调用方可能把自己创建的目录放在 repo_dir 之内——
+# pr-review 就把 .trusted-base 与 .trusted-policy checkout 到 $GITHUB_WORKSPACE，而它
+# 又以同一个目录作为 repo_dir。这些目录属于 workflow 的实现细节，在准备脚本运行前就
+# 已存在，不该被算作「准备脚本弄脏了工作树」。只比较基线之后新增的条目，因此不必让
+# 这个共享脚本知道任何调用方的路径约定。
+# 基线在确认要执行准备脚本之后才采集，见下方 script_path 的空值短路。未声明 setup_script
+# 时不得执行任何 git 命令：消费仓库可能存在无法遍历的 gitlink（例如 .gitmodules 缺少条目
+# 的未初始化 submodule），那会让 submodule foreach 以 128 退出，把「本仓库根本没用这个
+# 特性」变成 job 失败。
+baseline_status=""
+
+# 所有模式都要求准备脚本执行后不新增脏状态。
 #
 # change 模式：残留改动会被 package-change-result.sh 的 `git add -A` 静默打包进候选提交。
 #
@@ -37,21 +59,28 @@ esac
 # 的后果。question 与 pr-review 不会失败，但 Agent 会基于已偏离固定 SHA 的 checkout 分析，
 # 与「准备脚本只影响验证工具链、不影响审查什么」这条契约矛盾。
 assert_clean_worktree() {
-  local dirty dirty_submodules
-  # 口径与 package-change-result.sh 保持一致：--ignore-submodules=none 覆盖消费仓库把
-  # submodule.<name>.ignore 设为 all 的情况，递归 foreach 捕获 submodule 内部的脏状态。
-  # 否则准备脚本弄脏 submodule 时，用户会看到「不支持跨仓库修改」这种与实际原因不符的
-  # BLOCKED，而不是「你的准备脚本改动了工作树」。
-  dirty=$(git -C "$repo_dir" status --porcelain --untracked-files=all --ignore-submodules=none)
-  dirty_submodules=$(git -C "$repo_dir" submodule foreach --quiet --recursive '
-    if [ -n "$(git status --porcelain --untracked-files=all)" ]; then
-      printf "%s\n" "$displaypath"
+  local current added
+  current=$(worktree_status)
+  # 逐行比对整条 porcelain 记录，路径含空格也不会被拆开。基线中已存在的条目不再报告。
+  added=$(comm -13 <(printf '%s\n' "$baseline_status" | sort) \
+                   <(printf '%s\n' "$current" | sort) | sed '/^$/d')
+  if [[ -n "$added" ]]; then
+    # 文案只陈述已确证的事实。issue #31 的教训是：硬编码一个未经确证的原因会把排查方向
+    # 引偏。这里有两处不能一概而论——脚本可能是以非零码结束的（此时它并未「成功后留下
+    # 产物」），而删除已跟踪文件无法用 .gitignore 解决。
+    if [[ "${1:-}" == after-failure ]]; then
+      echo "::error::环境准备脚本以退出码 ${hook_status:-?} 结束，并改动了工作树："
+    else
+      echo "::error::环境准备脚本改动了工作树："
     fi
-  ')
-  if [[ -n "$dirty" || -n "$dirty_submodules" ]]; then
-    echo "::error::环境准备脚本改动了工作树，其产物必须被 .gitignore 覆盖："
-    [[ -n "$dirty" ]] && printf '%s\n' "$dirty" >&2
-    [[ -n "$dirty_submodules" ]] && printf 'dirty submodule: %s\n' "$dirty_submodules" >&2
+    printf '%s\n' "$added" >&2
+    # 只有未跟踪的新增条目（?? 前缀）才是 .gitignore 能解决的。
+    if printf '%s\n' "$added" | grep -q '^??'; then
+      echo "::error::以 ?? 开头的条目是新增的未跟踪文件，应由消费仓库的 .gitignore 覆盖" >&2
+    fi
+    if printf '%s\n' "$added" | grep -qv '^??'; then
+      echo "::error::其余条目是对已跟踪内容的改动或删除，.gitignore 无法解决，准备脚本不应触碰" >&2
+    fi
     exit 1
   fi
 }
@@ -93,6 +122,9 @@ if [[ ! -f "$hook" ]]; then
 fi
 
 echo "::notice::执行环境准备脚本 $script_path"
+# 只在真正要执行脚本时采集基线：空输入与文件缺失两条路径都已提前返回，因此不会在
+# 「未使用该特性」的仓库上运行任何 git 命令。
+baseline_status=$(worktree_status)
 log="${RUNNER_TEMP:-/tmp}/setup-hook.log"
 hook_status=0
 # 用 timeout 自行限时，而不是只依赖步骤级 timeout-minutes。步骤级超时由 runner 直接
@@ -130,4 +162,4 @@ echo "::warning::环境准备脚本以退出码 $hook_status 结束，任务继�
   printf -- '\n--- end setup hook log ---\n'
 } >> "$prompt_file"
 
-assert_clean_worktree
+assert_clean_worktree after-failure

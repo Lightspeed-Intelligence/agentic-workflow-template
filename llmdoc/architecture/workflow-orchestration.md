@@ -73,8 +73,10 @@ worktree data, so dependency manifests remain an execution path; the pinned sour
 The step receives no secret because it can export `GITHUB_ENV` to later steps holding the model key.
 
 Runtime failure is non-fatal: exit code and truncated log tail are appended to the prompt as untrusted
-data and the Agent discloses which verification it could not perform. Path-validation failure and a dirty
-worktree after the hook are configuration errors that fail the job, in every workflow.
+data and the Agent discloses which verification it could not perform. Path-validation failure and any dirty
+state the hook itself introduced are configuration errors that fail the job, in every workflow. The check
+compares against a baseline captured before the hook runs, so state that already existed — including
+directories the calling workflow created inside `repo_dir` — is not attributed to the hook.
 
 ## Invariants
 
@@ -88,8 +90,13 @@ worktree after the hook are configuration errors that fail the job, in every wor
   successful; publisher-only rejection must not suppress fallback.
 - Gitlink add/change/delete and dirty recursive submodule worktrees are never silently truncated into
   a publishable root-repository bundle.
-- Setup-hook artifacts never reach an Agent. Every workflow asserts a clean worktree right after the hook
-  and before the Agent runs. In `implement`/`update-llmdoc` residue would otherwise be `git add -A`'d into
+- Setup-hook artifacts that produce a new `git status` entry never reach an Agent. Every workflow compares
+  worktree state before and after the hook, right before the Agent runs, and fails on anything the hook
+  added. This is not an absolute guarantee: `llmdoc/reference/workflow-contracts.md` enumerates the cases
+  that escape detection, notably writes inside a folded nested-`.git` directory. Those are bounded by the
+  hook's trust model — owner-maintained configuration, not a security boundary — and the Agent does receive
+  the workspace, so a determined owner-authored hook can still influence it.
+  What the check does prevent: in `implement`/`update-llmdoc` residue would otherwise be `git add -A`'d into
   the candidate commit; in `issue-dispatch` a post-Agent cleanliness assertion would fail both the primary
   and the fallback at the same point, yielding no answer at all; in `question`/`pr-review` the Agent would
   analyse a checkout that has drifted from the pinned SHA.

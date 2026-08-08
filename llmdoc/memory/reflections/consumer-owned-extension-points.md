@@ -136,6 +136,119 @@ nothing compared the five workflows' pins *to each other* — repinning one work
 real commit passed. A claim about a cross-file invariant needs a check that actually reads across those
 files.
 
+## The template cannot test a consumer-only configuration
+
+Issue #31: after this extension point shipped, any consumer declaring `setup_script` in `pr-review.yml`
+failed on both the primary and the fallback chain, with the error blaming the consumer's setup script for
+dirtying the worktree. The real cause was that `pr-review` checks out `.trusted-base` and
+`.trusted-policy` **inside** `$GITHUB_WORKSPACE` and then passes that same directory as the hook's
+`repo_dir`, so `git status` was always going to list them as untracked. The timing made it unavoidable:
+those directories exist before the hook runs, and the assertion runs after.
+
+Nine local blind rounds, two automated PR reviews and a terminal audit all missed it. The reason is
+structural, not carelessness: **this repository never declares `setup_script` on itself.** The code path
+that fails is only reachable from a consumer configuration, so every green run — including the PR that
+introduced the bug reviewing itself — exercised the empty-input no-op branch instead. Reviewers verified
+the clean-worktree assertion against synthetic fixtures where `repo_dir` contained nothing but the fixture
+repository, which is precisely the condition that hides the defect.
+
+Two lessons:
+
+- When adding an opt-in extension point that this repository will not itself opt into, the offline fixture
+  must reproduce the **caller's** directory layout, not just the script's contract. Passing `repo_dir` a
+  bare fixture repo tests an arrangement no real caller uses. The regression test now plants
+  `.trusted-base`/`.trusted-policy` inside the fixture before running the hook.
+- A shared script should not encode its callers' path conventions. The fix compares worktree status against
+  a baseline captured before the hook runs and reports only additions, so `run-setup-hook.sh` needs to know
+  nothing about `pr-review`'s layout. Excluding the two paths by name would have worked too, but it would
+  also have silently exempted a consumer that genuinely tracks files under those names — the issue reporter
+  flagged that risk explicitly. Keying on status entries rather than path names keeps that case failing.
+
+Also worth noting: the error text said "your setup script's artifacts must be gitignored" while pointing at
+a workflow-owned directory. A hardcoded diagnosis that names a cause it has not established sends every
+reader down the wrong path. The message is now only produced for state the hook actually introduced.
+
+### A supplement reported a lost finding and I did not act on it
+
+The first-round review raised three important findings. I transcribed two into the closure ledger and lost
+the third — the one saying the error text asserted a cause it had not established. The incremental round's
+supplement caught the omission and said so directly: this finding has no ledger entry and needs one.
+
+I read that supplement. I acted on its other challenge (it disputed a mechanism correction of mine, and it
+was right). I missed this one, and then wrote three records asserting that nothing had been lost: "no finding
+was dismissed", "10 findings, all fixed", and a manifest field summarising that very supplement as
+"no prior finding vanished". The terminal auditor found it.
+
+Two things worth keeping:
+
+- The supplement mechanism works — it exists precisely to catch findings that vanish, and it did. The failure
+  was downstream, in acting on it. When a supplement names an omission, that is a work item, not commentary;
+  transcribe it into the ledger before writing any completeness claim.
+- Count findings from the source reports, not from the ledger. My "0 blocking / 3 important / 2 minor" tally
+  matched the report totals only by coincidence: an important finding had been dropped and a minor one moved
+  into its slot. A total that ties tells you nothing unless each item is matched individually.
+
+The lost finding was itself an instance of the mistake this whole task was about — a hardcoded diagnosis
+naming a cause it has not established. It advised `.gitignore` for a deleted tracked file, which
+`.gitignore` cannot fix, and implied success on a path reached only after the hook had failed.
+
+### I "corrected" a reviewer and was wrong
+
+The first-round reviewer described the masking mechanism as porcelain *folding* of a directory. I tried to
+reproduce it, saw the file listed individually under `--untracked-files=all`, and recorded a correction in the
+ledger saying the real mechanism was that an untracked file's status line is content-independent.
+
+The reviewer disputed that in its supplement, and it was right. A directory containing a **nested `.git`**
+folds to a single `?? dir/` entry, and adding or deleting files inside it produces no new line at all. My
+fixture had no nested `.git`, so I reproduced a different, weaker phenomenon and generalised from it. In the
+real `pr-review` layout the nested `.git` always exists, because `actions/checkout` with `path:` creates it —
+so folding is the live mechanism, not the edge case. Verified directly: a hook that writes a new file into
+`.trusted-policy/` and deletes an existing one exits 0.
+
+Both mechanisms are real and they have different consequences, so the documentation now lists them
+separately. Two lessons:
+
+- When a reproduction contradicts a reviewer's stated mechanism, suspect the fixture before the reviewer.
+  Mine differed from the real caller layout in exactly the detail that mattered — the same class of mistake
+  that caused issue #31 in the first place.
+- A ledger correction is an assertion like any other and deserves the same standard of evidence as a finding.
+  Writing "the reviewer's description is wrong" on the strength of one fixture was premature; the retraction
+  is recorded rather than quietly dropped.
+
+### A baseline must be captured no earlier than the action it measures
+
+The first fix put the baseline capture at the top of the script, before the `setup_script`-is-empty
+short-circuit. That made every workflow run `git status` and `submodule foreach` even when the feature was
+switched off — and a repository with an unusable gitlink (a `.gitmodules` entry missing for a checked-out
+submodule path) then exited 128. A repository not using the feature at all would have started failing.
+
+Lesson: a "before" measurement belongs immediately before the thing it measures, past every early return.
+Placing it at the top of the script looks harmless because the value is only consumed later, but the
+*collection* has side effects and failure modes of its own.
+
+Guarding this needed a different kind of fixture. Asserting the early-return exit codes proves nothing —
+they were 0 both before and after the fix, because the failure only appears in a repository with an
+unusable gitlink. The regression test instead puts a fake `git` on `PATH` that records every invocation,
+then asserts the early-return paths record **nothing**, with a positive control confirming the real path
+does call `git`. Without that control the assertion would pass vacuously if the shim were never reached.
+
+Note also what did *not* protect this: reverting the relocation while leaving the pin stale fails CI, but
+only through the byte-for-byte pin comparison. That proves "you edited a pinned file without releasing it",
+not "the behavior is right". A reviewer demonstrated the gap by reverting *and* performing a correct
+two-commit repin — both harnesses then went green. When judging whether a guard exists, advance the pin as
+part of the mutation, or the pin check will mask the absence of a behavioral assertion.
+
+### A reset in a shared fixture helper can silently disarm later cases
+
+The regression fixture planted the workflow-owned directories once, then ran each case through a helper that
+ended with `git clean -qfd`. That deleted the planted directories, so only the very first case saw them —
+and the `review` branch, the actual victim of the bug, was never guarded. Mutating the implementation to
+skip the baseline in `review` mode passed both harnesses.
+
+Lesson: when a fixture helper resets state between cases, anything the test *depends on* must be re-planted
+inside the helper, not set up once outside it. Verify by mutating the specific branch each case claims to
+cover, not just the first one.
+
 ## Fixture hazards found while writing the harness
 
 - Temporary git repositories inherit the author's `commit.gpgsign`/`gpg.format`. With SSH signing,
