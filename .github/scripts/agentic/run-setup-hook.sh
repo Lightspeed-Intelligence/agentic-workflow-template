@@ -65,8 +65,22 @@ assert_clean_worktree() {
   added=$(comm -13 <(printf '%s\n' "$baseline_status" | sort) \
                    <(printf '%s\n' "$current" | sort) | sed '/^$/d')
   if [[ -n "$added" ]]; then
-    echo "::error::环境准备脚本改动了工作树，其产物必须被 .gitignore 覆盖："
+    # 文案只陈述已确证的事实。issue #31 的教训是：硬编码一个未经确证的原因会把排查方向
+    # 引偏。这里有两处不能一概而论——脚本可能是以非零码结束的（此时它并未「成功后留下
+    # 产物」），而删除已跟踪文件无法用 .gitignore 解决。
+    if [[ "${1:-}" == after-failure ]]; then
+      echo "::error::环境准备脚本以退出码 ${hook_status:-?} 结束，并改动了工作树："
+    else
+      echo "::error::环境准备脚本改动了工作树："
+    fi
     printf '%s\n' "$added" >&2
+    # 只有未跟踪的新增条目（?? 前缀）才是 .gitignore 能解决的。
+    if printf '%s\n' "$added" | grep -q '^??'; then
+      echo "::error::以 ?? 开头的条目是新增的未跟踪文件，应由消费仓库的 .gitignore 覆盖" >&2
+    fi
+    if printf '%s\n' "$added" | grep -qv '^??'; then
+      echo "::error::其余条目是对已跟踪内容的改动或删除，.gitignore 无法解决，准备脚本不应触碰" >&2
+    fi
     exit 1
   fi
 }
@@ -148,4 +162,4 @@ echo "::warning::环境准备脚本以退出码 $hook_status 结束，任务继�
   printf -- '\n--- end setup hook log ---\n'
 } >> "$prompt_file"
 
-assert_clean_worktree
+assert_clean_worktree after-failure
