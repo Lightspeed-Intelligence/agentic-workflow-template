@@ -515,6 +515,46 @@ def test_setup_hook_behavior() -> None:
             # 产生未被忽略的新文件同样被拒绝。
             assert run_mode("untracked", mode) == 1, mode
 
+        # 报错文案只能陈述已确证的事实。issue #31 的教训正是硬编码未经确证的原因会把排查
+        # 方向引偏，因此这里断言四种组合各自的措辞：
+        #   - 脚本成功 vs 以非零码结束（后者不得暗示「成功后留下产物」）
+        #   - 新增未跟踪文件（.gitignore 可解决）vs 改动/删除已跟踪内容（无法解决）
+        msg_cases = {
+            "msg-untracked": ("echo x > new.txt\n", False, True),
+            "msg-deleted": ("rm -f tracked.txt\n", False, False),
+            "msg-failnew": ("echo x > new.txt\nexit 7\n", True, True),
+            "msg-faildel": ("rm -f tracked.txt\nexit 7\n", True, False),
+        }
+        for name, (body, _failed, _untracked) in msg_cases.items():
+            (source / f".github/setup-{name}.sh").write_text(body)
+        git(source, "add", "-A")
+        git(source, "commit", "-qm", "message-wording cases")
+        for name, (_body, failed, untracked) in msg_cases.items():
+            for path, content in workflow_owned.items():
+                target = source / path
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(content)
+            scratch = workspace / "scratch"
+            scratch.mkdir(exist_ok=True)
+            prompt = scratch / "prompt.txt"
+            prompt.write_text("base prompt\n")
+            env = os.environ.copy()
+            env["RUNNER_TEMP"] = str(scratch)
+            result = run(
+                ["bash", str(hook), f".github/setup-{name}.sh", str(source), str(source),
+                 str(prompt), "review"],
+                env=env, check=False,
+            )
+            assert result.returncode == 1, (name, result.stdout, result.stderr)
+            out = result.stdout + result.stderr
+            # 失败路径必须报出退出码，成功路径不得声称脚本失败。
+            assert ("以退出码" in out and "并改动了工作树" in out) == failed, (name, out)
+            # .gitignore 建议只对 ?? 条目给出。
+            assert (".gitignore 覆盖" in out) == untracked, (name, out)
+            assert (".gitignore 无法解决" in out) == (not untracked), (name, out)
+            git(source, "checkout", "-q", "--", ".")
+            git(source, "clean", "-qfd")
+
         # 回归 issue #31：pr-review 把 .trusted-base / .trusted-policy checkout 到
         # $GITHUB_WORKSPACE，又以同一目录作为 repo_dir。这些目录在准备脚本运行前就存在，
         # 属于 workflow 实现细节，不得被算作准备脚本的产物——否则只要声明 setup_script
