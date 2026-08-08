@@ -172,7 +172,13 @@ repeatedly clicking **Re-run jobs** cannot validate the newly merged workflow.
   and report only what the action added, rather than exempting known paths by name — name-based exemption
   also hides real changes to consumer-tracked files under those names.
 - Emitting a diagnostic that asserts a cause the check has not established ("your script dirtied the tree"
-  for state the script never touched). It sends every reader down the wrong path.
+  for state the script never touched). It sends every reader down the wrong path. This includes advice the
+  reader cannot act on — suggesting `.gitignore` for a deleted tracked file — and wording that implies success
+  on a path reached only after a failure.
+- Writing a completeness claim ("nothing was dismissed", "N findings, all fixed") without matching each source
+  report item individually. A total that ties can still hide a dropped finding, with another severity moved
+  into its slot. When a review supplement reports an omission, treat it as a work item and transcribe it into
+  the ledger before making any such claim.
 - Asserting that each argument literal appears somewhere in a step instead of asserting the argument
   sequence. Swapping two path operands keeps every literal present while inverting the meaning — for the
   setup hook that silently moves the script source from the trusted checkout to the PR head worktree.

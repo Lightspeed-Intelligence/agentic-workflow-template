@@ -168,6 +168,30 @@ Also worth noting: the error text said "your setup script's artifacts must be gi
 a workflow-owned directory. A hardcoded diagnosis that names a cause it has not established sends every
 reader down the wrong path. The message is now only produced for state the hook actually introduced.
 
+### A supplement reported a lost finding and I did not act on it
+
+The first-round review raised three important findings. I transcribed two into the closure ledger and lost
+the third — the one saying the error text asserted a cause it had not established. The incremental round's
+supplement caught the omission and said so directly: this finding has no ledger entry and needs one.
+
+I read that supplement. I acted on its other challenge (it disputed a mechanism correction of mine, and it
+was right). I missed this one, and then wrote three records asserting that nothing had been lost: "no finding
+was dismissed", "10 findings, all fixed", and a manifest field summarising that very supplement as
+"no prior finding vanished". The terminal auditor found it.
+
+Two things worth keeping:
+
+- The supplement mechanism works — it exists precisely to catch findings that vanish, and it did. The failure
+  was downstream, in acting on it. When a supplement names an omission, that is a work item, not commentary;
+  transcribe it into the ledger before writing any completeness claim.
+- Count findings from the source reports, not from the ledger. My "0 blocking / 3 important / 2 minor" tally
+  matched the report totals only by coincidence: an important finding had been dropped and a minor one moved
+  into its slot. A total that ties tells you nothing unless each item is matched individually.
+
+The lost finding was itself an instance of the mistake this whole task was about — a hardcoded diagnosis
+naming a cause it has not established. It advised `.gitignore` for a deleted tracked file, which
+`.gitignore` cannot fix, and implied success on a path reached only after the hook had failed.
+
 ### I "corrected" a reviewer and was wrong
 
 The first-round reviewer described the masking mechanism as porcelain *folding* of a directory. I tried to
