@@ -238,6 +238,7 @@ jobs:
           cat > "$CODEX_HOME/config.toml" <<EOF
           model = "gpt-5.6-sol"
           model_provider = "gateway"
+          service_tier = "priority"
 
           [model_providers.gateway]
           name = "gateway"
