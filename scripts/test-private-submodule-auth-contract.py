@@ -31,7 +31,7 @@ INIT_STEP = """- &initialize-submodules-with-deploy-key
 INIT_STEP_ALIAS = "- *initialize-submodules-with-deploy-key"
 GITHUB_ED25519_HOST_KEY = (
     "github.com ssh-ed25519 "
-    "AAAAC3NzaC1lZDI1NTE5AAAAIOMq3gHKZLKWK4FvQqIa3SPUNajdegbGgdzjmTop"
+    "AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl"
 )
 
 

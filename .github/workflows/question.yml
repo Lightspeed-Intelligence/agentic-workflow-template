@@ -130,7 +130,7 @@ jobs:
 
           printf '%s' "$SUBMODULE_SSH_KEY_BASE64" | base64 --decode > "$key_file"
           cat > "$known_hosts" <<'KNOWN_HOSTS'
-          github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMq3gHKZLKWK4FvQqIa3SPUNajdegbGgdzjmTop
+          github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
           KNOWN_HOSTS
           chmod 600 "$key_file" "$known_hosts"
           export GIT_SSH_COMMAND="ssh -i $key_file -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$known_hosts"
