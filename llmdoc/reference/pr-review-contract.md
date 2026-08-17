@@ -19,9 +19,13 @@
 - `OPENAI_API_KEY` and `OPENAI_BASE_URL` optional. Codex resolves each independently as
   `OPENAI_*` first, then the corresponding `ANTHROPIC_*` value; Claude always uses `ANTHROPIC_*`.
 - Feishu webhook optional.
-- `PAT_TOKEN` optional for PR-head checkout of cross-repository private submodules. Both reviewer
-  checkouts resolve `PAT_TOKEN || github.token`, disable credential persistence, and never inject
-  PAT into an Agent process.
+- `SUBMODULE_SSH_KEY_BASE64` optional and preferred for a cross-repository private submodule. Both
+  reviewer root checkouts use `github.token` without submodules, then a deterministic step decodes the
+  temporary read-only Deploy Key, verifies GitHub through a pinned Ed25519 host key, recursively initializes
+  submodules and removes the key before the Agent starts.
+- `PAT_TOKEN` remains an optional compatibility fallback. When the Deploy Key is absent, both reviewer
+  checkouts retain recursive `PAT_TOKEN || github.token` behavior. Neither credential is injected into an
+  Agent process.
 
 ## Artifact Schema
 

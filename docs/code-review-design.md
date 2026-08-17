@@ -372,7 +372,7 @@ graph TD
     subgraph review_jobs["Agent Jobs"]
         local["✅ 完整本地执行权限"]
         read["✅ contents / pull-requests: read"]
-        no_pat["❌ Agent 进程获取 PAT_TOKEN"]
+        no_pat["❌ Agent 进程获取 Deploy Key / PAT_TOKEN"]
         no_write["❌ GitHub 写 token"]
     end
 
@@ -383,7 +383,8 @@ graph TD
     end
 
     subgraph tokens["其它凭据"]
-        pat["PAT_TOKEN（可选）<br/>仅 checkout 私有 submodule"]
+        deploy["SUBMODULE_SSH_KEY_BASE64（推荐）<br/>仅临时 checkout 私有 submodule"]
+        pat["PAT_TOKEN（兼容）<br/>Deploy Key 未设置时 checkout 回退"]
         ak["ANTHROPIC_API_KEY<br/>Claude 与 Codex 默认凭据"]
         oak["OPENAI_API_KEY（可选）<br/>Codex 独立凭据"]
         fw["FEISHU_WEBHOOK_TOKEN<br/>发飞书通知"]

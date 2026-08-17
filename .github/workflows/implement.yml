@@ -25,6 +25,9 @@ on:
         required: false
       OPENAI_BASE_URL:
         required: false
+      # 可选；优先用于只读拉取跨仓库私有 submodule，base64 编码以安全承载多行私钥。
+      SUBMODULE_SSH_KEY_BASE64:
+        required: false
       PAT_TOKEN:
         required: false
       FEISHU_WEBHOOK_TOKEN:
@@ -112,9 +115,38 @@ jobs:
           ref: ${{ needs.prepare.outputs.base_sha }}
           path: consumer
           fetch-depth: 0
-          submodules: recursive
+          submodules: ${{ secrets.SUBMODULE_SSH_KEY_BASE64 == '' && 'recursive' || 'false' }}
           persist-credentials: false
-          token: ${{ secrets.PAT_TOKEN || github.token }}
+          token: ${{ secrets.SUBMODULE_SSH_KEY_BASE64 != '' && github.token || secrets.PAT_TOKEN || github.token }}
+
+      - &initialize-submodules-with-deploy-key
+        name: Initialize recursive submodules with deploy key
+        env:
+          CONSUMER_DIR: "consumer"
+          SUBMODULE_SSH_KEY_BASE64: ${{ secrets.SUBMODULE_SSH_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$SUBMODULE_SSH_KEY_BASE64" ]]; then
+            exit 0
+          fi
+
+          key_dir="$(mktemp -d "$RUNNER_TEMP/submodule-key.XXXXXX")"
+          key_file="$key_dir/deploy-key"
+          known_hosts="$key_dir/known_hosts"
+          cleanup() {
+            rm -f -- "$key_file" "$known_hosts"
+            rmdir -- "$key_dir" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          printf '%s' "$SUBMODULE_SSH_KEY_BASE64" | base64 --decode > "$key_file"
+          cat > "$known_hosts" <<'KNOWN_HOSTS'
+          github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMq3gHKZLKWK4FvQqIa3SPUNajdegbGgdzjmTop
+          KNOWN_HOSTS
+          chmod 600 "$key_file" "$known_hosts"
+          export GIT_SSH_COMMAND="ssh -i $key_file -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=$known_hosts"
+          git -C "$CONSUMER_DIR" -c 'url.git@github.com:.insteadOf=https://github.com/' submodule sync --recursive
+          git -C "$CONSUMER_DIR" -c 'url.git@github.com:.insteadOf=https://github.com/' submodule update --init --recursive
 
       - name: Checkout trusted agent runtime
         uses: actions/checkout@v5
@@ -229,9 +261,11 @@ jobs:
           ref: ${{ needs.prepare.outputs.base_sha }}
           path: consumer
           fetch-depth: 0
-          submodules: recursive
+          submodules: ${{ secrets.SUBMODULE_SSH_KEY_BASE64 == '' && 'recursive' || 'false' }}
           persist-credentials: false
-          token: ${{ secrets.PAT_TOKEN || github.token }}
+          token: ${{ secrets.SUBMODULE_SSH_KEY_BASE64 != '' && github.token || secrets.PAT_TOKEN || github.token }}
+
+      - *initialize-submodules-with-deploy-key
 
       - name: Preserve optional base-pinned validator
         run: |
@@ -285,9 +319,11 @@ jobs:
           ref: ${{ needs.prepare.outputs.base_sha }}
           path: consumer
           fetch-depth: 0
-          submodules: recursive
+          submodules: ${{ secrets.SUBMODULE_SSH_KEY_BASE64 == '' && 'recursive' || 'false' }}
           persist-credentials: false
-          token: ${{ secrets.PAT_TOKEN || github.token }}
+          token: ${{ secrets.SUBMODULE_SSH_KEY_BASE64 != '' && github.token || secrets.PAT_TOKEN || github.token }}
+
+      - *initialize-submodules-with-deploy-key
 
       - name: Checkout trusted agent runtime
         uses: actions/checkout@v5
@@ -396,9 +432,11 @@ jobs:
           ref: ${{ needs.prepare.outputs.base_sha }}
           path: consumer
           fetch-depth: 0
-          submodules: recursive
+          submodules: ${{ secrets.SUBMODULE_SSH_KEY_BASE64 == '' && 'recursive' || 'false' }}
           persist-credentials: false
-          token: ${{ secrets.PAT_TOKEN || github.token }}
+          token: ${{ secrets.SUBMODULE_SSH_KEY_BASE64 != '' && github.token || secrets.PAT_TOKEN || github.token }}
+
+      - *initialize-submodules-with-deploy-key
 
       - name: Preserve optional base-pinned validator
         run: |

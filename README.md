@@ -26,12 +26,21 @@ gh secret set ANTHROPIC_BASE_URL
 gh secret set OPENAI_API_KEY
 gh secret set OPENAI_BASE_URL
 
-# 可选 (私有 submodule 访问)
+# 可选 (私有 submodule 访问，推荐使用对应仓库的只读 Deploy Key，并以 base64 存储)
+gh secret set SUBMODULE_SSH_KEY_BASE64
+
+# 可选 (兼容旧的私有 submodule checkout；写代码 workflow 的 publisher 也可使用)
 gh secret set PAT_TOKEN
 
 # 可选 (飞书通知)
 gh secret set FEISHU_WEBHOOK_TOKEN
 ```
+
+设置 `SUBMODULE_SSH_KEY_BASE64` 后，workflow 先用内置 `GITHUB_TOKEN` 拉主仓库，再以临时
+只读 Deploy Key 递归初始化 submodule；私钥不会传给 Agent，并会在该步骤结束时删除。
+未设置时保持 `PAT_TOKEN || GITHUB_TOKEN` 的原有 checkout 行为。Deploy Key 只授权它所挂载
+的一个私有仓库；若递归 submodule 跨多个私有仓库，应继续使用具备相应只读范围的 PAT，
+或调整仓库拓扑。
 
 ### 3. 创建调用工作流
 
@@ -62,6 +71,7 @@ jobs:
       ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      SUBMODULE_SSH_KEY_BASE64: ${{ secrets.SUBMODULE_SSH_KEY_BASE64 }}
       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
 
@@ -78,6 +88,7 @@ jobs:
       ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      SUBMODULE_SSH_KEY_BASE64: ${{ secrets.SUBMODULE_SSH_KEY_BASE64 }}
       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
 
@@ -93,6 +104,7 @@ jobs:
       ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      SUBMODULE_SSH_KEY_BASE64: ${{ secrets.SUBMODULE_SSH_KEY_BASE64 }}
       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
 
@@ -108,6 +120,7 @@ jobs:
       ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      SUBMODULE_SSH_KEY_BASE64: ${{ secrets.SUBMODULE_SSH_KEY_BASE64 }}
       PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
       FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
 ```
@@ -273,7 +286,8 @@ Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有
 | `ANTHROPIC_BASE_URL`   | ❌   | 自定义 API 端点 (代理/私有部署)             |
 | `OPENAI_API_KEY`       | ❌   | Codex API Key；为空时回退到 `ANTHROPIC_API_KEY` |
 | `OPENAI_BASE_URL`      | ❌   | Codex API 端点；为空时回退到 `ANTHROPIC_BASE_URL` |
-| `PAT_TOKEN`            | ❌   | 私有 submodule checkout；写代码 workflow 也可仅在 publisher 使用 |
+| `SUBMODULE_SSH_KEY_BASE64` | ❌ | 私有 submodule 的只读 Deploy Key（base64）；设置后 checkout 不再需要 PAT |
+| `PAT_TOKEN`            | ❌   | Deploy Key 未设置时的私有 submodule 兼容回退；写代码 workflow 的 publisher 也可使用 |
 | `FEISHU_WEBHOOK_TOKEN` | ❌   | 飞书机器人 Webhook Token                    |
 
 ## 目录结构

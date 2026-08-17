@@ -657,12 +657,21 @@ def test_model_names(workflow: str, readme: str, question_workflow: str) -> None
 
 
 def test_checkout_credentials(workflow: str, caller: str) -> None:
-    checkout_token = 'token: ${{ secrets.PAT_TOKEN || github.token }}'
+    checkout_token = (
+        "token: ${{ secrets.SUBMODULE_SSH_KEY_BASE64 != '' && github.token "
+        "|| secrets.PAT_TOKEN || github.token }}"
+    )
     assert workflow.count(checkout_token) == 2
     assert workflow.count('token: ${{ github.token }}') == 4
     assert workflow.count('secrets.PAT_TOKEN') == 2
     assert workflow.count('persist-credentials: false') == 6
+    assert workflow.count(
+        "submodules: ${{ secrets.SUBMODULE_SSH_KEY_BASE64 == '' && 'recursive' || 'false' }}"
+    ) == 2
     assert caller.count('PAT_TOKEN: ${{ secrets.PAT_TOKEN }}') == 4
+    assert caller.count(
+        'SUBMODULE_SSH_KEY_BASE64: ${{ secrets.SUBMODULE_SSH_KEY_BASE64 }}'
+    ) == 4
 
 
 def test_trusted_policy_source(workflow: str) -> None:

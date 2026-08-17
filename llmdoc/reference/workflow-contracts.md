@@ -25,8 +25,13 @@ revision; after updating a moving ref, use a fresh matching event/run to consume
 - Every Codex job resolves optional `OPENAI_API_KEY` and `OPENAI_BASE_URL` independently, falling back
   per field to the corresponding `ANTHROPIC_*` secret. Every Claude fallback uses `claude-opus-5`
   and receives only `ANTHROPIC_*`.
-- `PAT_TOKEN` is for private-submodule checkout and, in code-writing workflows, the isolated publisher.
-  Checkouts disable credential persistence and Agent processes never receive PAT or GitHub tokens.
+- `SUBMODULE_SSH_KEY_BASE64` is the preferred private-submodule credential: a base64-encoded, read-only
+  Deploy Key scoped only to the deterministic submodule-init step. When present, the root checkout uses
+  `github.token` without submodules; the key step uses pinned GitHub host identity, recursively initializes
+  submodules, then removes its temporary files before any Agent process starts.
+- `PAT_TOKEN` remains the compatibility fallback when no Deploy Key is configured and, in code-writing
+  workflows, may still be used by the isolated publisher. Checkouts disable credential persistence and
+  Agent processes never receive Deploy Keys, PATs or GitHub tokens.
 
 ## Shared Result and Publication Semantics
 
@@ -108,10 +113,19 @@ Recursive checkout and `scripts/init.sh`, `scripts/status.sh`, `scripts/update-a
 consumer submodules. Every Agent/validator checkout that needs consumer context uses recursive
 submodules with `persist-credentials: false`. This template currently has no tracked `.gitmodules`.
 
-PR-review private cross-repository submodules require `PAT_TOKEN` with read access. The token is used
-only by PR-head `actions/checkout`, with credential persistence disabled, and is absent from Agents.
-The other four workflows likewise restrict PAT use to consumer checkout and, for code-writing tasks,
-the isolated publisher; template-runtime checkout continues to use the job token.
+All five reusable workflows accept `SUBMODULE_SSH_KEY_BASE64`. When it is set, every consumer checkout
+uses `github.token`, disables automatic submodule checkout, and then initializes recursive submodules in
+a separate step with the temporary read-only Deploy Key. HTTPS GitHub submodule URLs are rewritten to SSH
+for that command only; `StrictHostKeyChecking=yes`, `IdentitiesOnly=yes` and the pinned GitHub Ed25519 host
+key prevent ambient identity or host-key fallback. The secret is scoped to that step and temporary files
+are removed by an exit trap before Agent, validator or publisher logic continues.
+
+When the Deploy Key is absent, `actions/checkout` retains the existing recursive
+`PAT_TOKEN || github.token` behavior. A Deploy Key is repository-scoped, so a recursive graph containing
+multiple private repositories still needs a credential that can read all of them, such as the legacy PAT.
+For code-writing workflows, publisher authentication independently remains
+`PAT_TOKEN || github.token`; configuring or removing the checkout Deploy Key does not change PR writes.
+Template-runtime and trusted-policy checkouts always continue to use the job token.
 
 ## Sources of Truth
 

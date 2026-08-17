@@ -42,14 +42,17 @@ pull_request event
 ## Credential Invariants
 
 - `codex_review` and `claude_review`: only `contents: read` and `pull-requests: read`.
-- Reviewer PR-head checkouts may use optional `PAT_TOKEN` to read cross-repository private
-  submodules and use `persist-credentials: false`; trusted-policy checkout and preparation use the
-  read-only job token. Agent processes receive model credentials but no GitHub/PAT token.
+- Reviewer PR-head checkouts prefer optional `SUBMODULE_SSH_KEY_BASE64` for a cross-repository private
+  submodule. The root checkout uses the read-only job token with `persist-credentials: false`; a separate
+  deterministic step uses the temporary Deploy Key with strict pinned-host verification, recursively
+  initializes submodules and removes the key before Agent execution. When absent, checkout retains the
+  legacy `PAT_TOKEN || github.token` recursive path. Trusted-policy checkout and preparation use only the
+  read-only job token. Agent processes receive model credentials but no Deploy Key, GitHub token or PAT.
 - Codex prefers optional `OPENAI_API_KEY` and `OPENAI_BASE_URL`; each missing value independently
   falls back to its `ANTHROPIC_*` counterpart. Claude receives only the `ANTHROPIC_*` pair.
-- `PAT_TOKEN` is forwarded by callers only for checkout, with `github.token` as the fallback.
-- Only PR-head checkout may use that PAT fallback. Consumer-base history and immutable template-policy
-  checkouts use `github.token`; all checkout credentials are removed before Agent execution.
+- `SUBMODULE_SSH_KEY_BASE64` and legacy `PAT_TOKEN` are forwarded by callers only for consumer checkout.
+- Only PR-head checkout may use the Deploy Key or PAT fallback. Consumer-base history and immutable
+  template-policy checkouts use `github.token`; all checkout credentials are removed before Agent execution.
 - `publish`: receives GitHub PR-write authority and optional Feishu webhook, but no model key and no PR-head checkout.
 
 ## Local Privilege

@@ -24,8 +24,10 @@
   template's reviewer policy file.
 - If a consumer base lacks an optional trusted preparation script, generate full-review inputs with
   deterministic workflow commands. Never execute a PR-head copy as a bootstrap fallback.
-- A private-submodule PAT may be used by `actions/checkout` with `persist-credentials: false`; never
-  inject it into an Agent process or reuse it for public/template policy checkout.
+- Prefer a repository-scoped read-only Deploy Key for a private submodule: keep it step-scoped, verify a
+  pinned host key, remove temporary key material before Agent execution and use `persist-credentials: false`
+  for the root checkout. Retain checkout-only PAT fallback for multi-repository graphs and legacy consumers;
+  never inject either credential into an Agent process or reuse it for public/template policy checkout.
 - Resolve optional provider credentials per field: Codex `OPENAI_*` values may independently fall
   back to `ANTHROPIC_*`, while Claude continues to receive only `ANTHROPIC_*`.
 - Keep artifact paths non-hidden and upload/download names stable across rerun-failed-jobs behavior.

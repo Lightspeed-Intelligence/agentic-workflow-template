@@ -140,7 +140,9 @@ def test_provider_and_permission_boundaries() -> None:
         publisher = job_block(WORKFLOWS[name].read_text(), final)
         assert "contents: write" in publisher
         assert "pull-requests: write" in publisher
-    assert WORKFLOWS["update-llmdoc"].read_text().count("submodules: recursive") == 5
+    assert WORKFLOWS["update-llmdoc"].read_text().count(
+        "submodules: ${{ secrets.SUBMODULE_SSH_KEY_BASE64 == '' && 'recursive' || 'false' }}"
+    ) == 5
 
     action = ACTION.read_text()
     install_block = action.split("    - name: Install pinned agent CLI without model credentials", 1)[1]
