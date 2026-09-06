@@ -220,9 +220,9 @@ jobs:
 
       - name: Install pinned Codex CLI without lifecycle scripts
         run: |
-          CODEX_INSTALL_DIR="$RUNNER_TEMP/codex-0.145.0"
+          CODEX_INSTALL_DIR="$RUNNER_TEMP/codex-0.153.4"
           npm install --ignore-scripts --no-audit --no-fund \
-            --prefix "$CODEX_INSTALL_DIR" @openai/codex@0.145.0
+            --prefix "$CODEX_INSTALL_DIR" @openai/codex@0.153.4
           "$CODEX_INSTALL_DIR/node_modules/.bin/codex" --version
 
       - name: Review with Codex
@@ -475,9 +475,9 @@ jobs:
 
       - name: Install pinned Claude Code CLI without lifecycle scripts
         run: |
-          CLAUDE_INSTALL_DIR="$RUNNER_TEMP/claude-code-2.1.148"
+          CLAUDE_INSTALL_DIR="$RUNNER_TEMP/claude-code-2.1.261"
           npm install --ignore-scripts --no-audit --no-fund \
-            --prefix "$CLAUDE_INSTALL_DIR" @anthropic-ai/claude-code@2.1.148
+            --prefix "$CLAUDE_INSTALL_DIR" @anthropic-ai/claude-code@2.1.261
           CLAUDE_WRAPPER="$CLAUDE_INSTALL_DIR/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs"
           test -f "$CLAUDE_WRAPPER"
           node "$CLAUDE_WRAPPER" --version
