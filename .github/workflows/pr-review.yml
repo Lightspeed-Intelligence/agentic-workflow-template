@@ -230,7 +230,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || secrets.ANTHROPIC_API_KEY }}
           OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL || secrets.ANTHROPIC_BASE_URL }}
         run: |
-          CODEX_PATH="$RUNNER_TEMP/codex-0.145.0/node_modules/.bin/codex"
+          CODEX_PATH="$RUNNER_TEMP/codex-0.153.4/node_modules/.bin/codex"
 
           export CODEX_HOME="$RUNNER_TEMP/codex-home"
           mkdir -p "$CODEX_HOME"
@@ -494,7 +494,7 @@ jobs:
           BASE_URL="${ANTHROPIC_BASE_URL:-https://llm.fantacy.live}"
           export ANTHROPIC_BASE_URL="${BASE_URL%/}"
 
-          CLAUDE_WRAPPER="$RUNNER_TEMP/claude-code-2.1.148/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs"
+          CLAUDE_WRAPPER="$RUNNER_TEMP/claude-code-2.1.261/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs"
 
           SCHEMA=$(jq -c . "$RUNNER_TEMP/review-schema.json")
           RAW_RESULT="$RUNNER_TEMP/claude-result.json"
