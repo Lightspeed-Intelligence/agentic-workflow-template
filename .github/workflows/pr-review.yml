@@ -81,7 +81,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: befe141677fd1a4cfb786b73f752021f7a02d385
+          ref: 241cdeef537c4695207f4aa13e557a554c21bc3d
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review
@@ -274,6 +274,7 @@ jobs:
           fi
           mkdir -p "$SAFE_ROOT"
           cd "$SAFE_ROOT"
+          set +e
           node "$CLAUDE_WRAPPER" -p \
             --bare \
             --no-session-persistence \
@@ -283,8 +284,24 @@ jobs:
             --output-format json \
             --json-schema "$SCHEMA" \
             < "$RUNNER_TEMP/review-prompt.txt" > "$RAW_RESULT"
+          CLAUDE_RC=$?
+          set -e
 
-          jq -e '(.is_error? // false) == false' "$RAW_RESULT" > /dev/null
+          # 失败时 CLI 的错误原因只在 stdout JSON 的 result 字段里，stderr 为空。把诊断字段
+          # 压成一行 ::error:: 注释：result 可能含 PR 派生文本，转义 %/CR/LF 后无法另起一行
+          # 伪造 workflow 命令；secret 仍由 Actions 日志遮蔽。
+          if [ "$CLAUDE_RC" -ne 0 ] || ! jq -e '(.is_error? // false) == false' "$RAW_RESULT" > /dev/null 2>&1; then
+            if [ ! -s "$RAW_RESULT" ]; then
+              DETAIL="CLI 未输出结果"
+            elif ! DETAIL=$(jq -r '"is_error=\(.is_error // "null") api_error_status=\(.api_error_status // "null") subtype=\(.subtype // "null") result=\((.result // "") | tostring | .[0:2000])"' "$RAW_RESULT" 2> /dev/null); then
+              DETAIL="CLI 输出不是 JSON：$(head -c 2000 "$RAW_RESULT")"
+            fi
+            DETAIL=${DETAIL//'%'/'%25'}
+            DETAIL=${DETAIL//$'\r'/'%0D'}
+            DETAIL=${DETAIL//$'\n'/'%0A'}
+            echo "::error::Claude Code 调用失败（退出码 ${CLAUDE_RC}）：${DETAIL}"
+            exit 1
+          fi
           mkdir -p "$GITHUB_WORKSPACE/review-output"
           jq -c '
             if (.structured_output? | type) == "object" then .structured_output
@@ -358,7 +375,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: befe141677fd1a4cfb786b73f752021f7a02d385
+          ref: 241cdeef537c4695207f4aa13e557a554c21bc3d
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review

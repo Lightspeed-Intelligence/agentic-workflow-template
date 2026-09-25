@@ -572,6 +572,63 @@ def test_setup_hook_wiring() -> None:
     assert "-eq 124" in hook, "必须识别 GNU timeout 的超时退出码"
 
 
+def extract_dedented(text: str, start: str, end: str) -> str:
+    begin = text.index(start)
+    block = text[begin:text.index(end, begin)]
+    lines = block.splitlines()
+    indent = min(len(line) - len(line.lstrip()) for line in lines if line.strip())
+    return "\n".join(line[indent:] for line in lines)
+
+
+def test_claude_failure_diagnostics() -> None:
+    # CLI 失败原因（如网关的渠道限制）只在 stdout JSON 的 result 里，stderr 为空。两处调用都必须
+    # 把它打印成恰好一行 workflow 命令：result 可能含不可信文本，未转义的 CR/LF 会另起一行伪造命令。
+    workflow = (ROOT / ".github/workflows/pr-review.yml").read_text()
+    snippets = {
+        "run-agent": extract_dedented(
+            ACTION.read_text(), "            set +e\n            (\n", "            jq -c '\n"
+        ),
+        "pr-review": extract_dedented(
+            workflow,
+            '          set +e\n          node "$CLAUDE_WRAPPER"',
+            '          mkdir -p "$GITHUB_WORKSPACE/review-output"',
+        ),
+    }
+    gateway_error = "API Error: 400 专用渠道限制: 接口仅可用于CC官方客户端"
+    cases = {
+        "gateway": (1, json.dumps({"is_error": True, "api_error_status": 400, "result": gateway_error}),
+                    [gateway_error, "api_error_status=400"]),
+        "injection": (1, json.dumps({"is_error": True, "result": "a 100%\n::warning::x\r\n::add-mask::y"}),
+                      ["a 100%25%0A::warning::x%0D%0A::add-mask::y"]),
+        "not-json": (1, "boom\n::error::x", ["CLI 输出不是 JSON：boom%0A::error::x"]),
+        "empty": (1, "", ["CLI 未输出结果"]),
+        "exit-zero-is-error": (0, json.dumps({"is_error": True, "result": "soft"}), ["（退出码 0）", "result=soft"]),
+    }
+    for name, snippet in snippets.items():
+        for case, (code, output, expected) in [*cases.items(), ("success", (0, json.dumps({"is_error": False}), None))]:
+            with tempfile.TemporaryDirectory() as temp:
+                tmp = Path(temp)
+                (tmp / "output").write_text(output)
+                (tmp / "review-prompt.txt").write_text("prompt")
+                fake = tmp / "node"
+                fake.write_text(f"#!/usr/bin/env bash\ncat > /dev/null\ncat '{tmp}/output'\nexit {code}\n")
+                fake.chmod(0o755)
+                script = (
+                    f"set -e\nCLAUDE_WRAPPER=x wrapper=x SCHEMA=s schema=s MODEL=m EXTRA_TOOL_ARGS=()\n"
+                    f"RUNNER_TEMP='{tmp}' PROMPT_FILE='{tmp}/review-prompt.txt' CONSUMER_WORKSPACE='{tmp}'\n"
+                    f"RAW_RESULT='{tmp}/raw.json' raw_result='{tmp}/raw.json'\n{snippet}\necho SUCCESS-PATH\n"
+                )
+                result = run(["bash", "-c", script], env={"PATH": f"{tmp}:/usr/bin:/bin"}, check=False)
+            lines = result.stdout.splitlines()
+            if expected is None:
+                assert result.returncode == 0 and lines == ["SUCCESS-PATH"], (name, result)
+                continue
+            assert result.returncode == 1, (name, case, result)
+            assert len(lines) == 1 and lines[0].startswith("::error::Claude Code 调用失败"), (name, case, lines)
+            for fragment in expected:
+                assert fragment in lines[0], (name, case, fragment, lines[0])
+
+
 def test_runtime_is_immutable() -> None:
     all_refs: set[str] = set()
     for path in WORKFLOWS.values():
@@ -617,6 +674,7 @@ def main() -> None:
     test_change_artifact_scripts()
     test_closes_is_publisher_owned()
     test_setup_hook_wiring()
+    test_claude_failure_diagnostics()
     test_runtime_is_immutable()
     print("agentic workflow contract fixtures passed")
 
