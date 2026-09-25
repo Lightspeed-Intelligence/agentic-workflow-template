@@ -11,7 +11,7 @@ copying Agent logic.
 - `.github/workflows/issue-dispatch.yml`: classifies new Issues without modifying code, then publishes an Issue response.
 - `.github/workflows/implement.yml`: produces and validates a local candidate commit before an isolated publisher creates or updates a PR.
 - `.github/workflows/question.yml`: answers explicit question commands through an isolated publisher.
-- `.github/workflows/pr-review.yml`: isolated Codex-primary/Claude-fallback review and publication.
+- `.github/workflows/pr-review.yml`: isolated Claude-primary/Codex-fallback review and publication.
 - `.github/workflows/update-llmdoc.yml`: produces and validates an llmdoc-only candidate commit before an isolated publisher creates or updates a PR.
 - `.claude/skills/`: task-specific behavior and output contracts.
 
@@ -22,9 +22,9 @@ copying Agent logic.
 3. A prepare job freezes event data and the consumer source SHA. The relevant Skill and shared runner
    come from an immutable template commit; consumers do not distribute template policy.
 4. After task inputs are frozen, an optional consumer-declared `setup_script` may prepare language
-   runtimes and dependencies. Codex runs first without GitHub write credentials. Process, schema or
-   structured soft failure starts Claude Code with `claude-opus-5` from the same fixed input in a
-   fresh runner.
+   runtimes and dependencies. Claude Code with `claude-opus-5-5` runs first without GitHub write
+   credentials. Process, schema or structured soft failure starts Codex with `gpt-6-sol` from the same
+   fixed input in a fresh runner.
 5. Pure-answer workflows transfer validated JSON. Code-writing workflows transfer a single-parent Git
    bundle which a separate read-only job validates before publication.
 6. Only the terminal `answer`, `dispatch`, `implement`, `update` or `review` job may publish. Stable
@@ -37,7 +37,7 @@ copying Agent logic.
 
 `question` and `issue-dispatch` normalize the primary result against their complete task-specific
 schema before upload. A missing field, wrong type, extra field or structured `INCOMPLETE` result
-makes the primary job fail and starts Claude from the original fixed input. The publisher accepts
+makes the primary job fail and starts Codex from the original fixed input. The publisher accepts
 only `COMPLETE` JSON, authenticates an existing marker comment by Bot and App identity, and removes
 the comment body from caller-visible output.
 

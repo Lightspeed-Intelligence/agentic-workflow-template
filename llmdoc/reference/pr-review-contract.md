@@ -2,8 +2,10 @@
 
 ## Fixed Runtime
 
-- Primary: `@openai/codex@0.145.0`, model `gpt-5.6-sol`.
-- Fallback: `@anthropic-ai/claude-code@2.1.148` package wrapper, model `claude-opus-5`.
+- Primary: `@anthropic-ai/claude-code@2.1.282` package wrapper, model `claude-opus-5-5`.
+- Fallback: `@openai/codex@0.156.1`, model `gpt-6-sol`.
+- `pr-review.yml` installs both CLIs inline instead of through `run-agent`; its versions must equal
+  `.github/actions/run-agent/action.yml`, which `scripts/test-agentic-workflow-contract.py` asserts.
 - Reviewer timeouts: 45 minutes each; publisher runs only after reviewer jobs settle.
 
 ## Inputs and Secrets
@@ -33,7 +35,7 @@ critical_count     non-negative integer
 important_count    non-negative integer
 suggestion_count   non-negative integer
 comment_body       non-empty Markdown, <= 60000 characters
-reviewer/model     codex/gpt-5.6-sol | claude/claude-opus-5
+reviewer/model     claude/claude-opus-5-5 | codex/gpt-6-sol
 ```
 
 `APPROVE` requires all counts zero. `REQUEST_CHANGES` requires critical or important nonzero.
@@ -68,13 +70,13 @@ Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even w
 
 ## Artifacts and Output
 
-- Reviewer artifacts: `review-result-codex` or `review-result-claude`, path `review-output/review.json`, overwrite enabled, one-day retention.
+- Reviewer artifacts: `review-result-claude` or `review-result-codex`, path `review-output/review.json`, overwrite enabled, one-day retention.
 - Public reusable output deletes `comment_body` and preserves review status, description, conclusion, counts, reviewer and model.
 - Publication uses a body file; model/PR text is not interpolated into shell commands.
 
 ## Failure Semantics
 
-- Any Codex job non-success, including structured `review_status=INCOMPLETE`, triggers Claude.
+- Any Claude job non-success, including structured `review_status=INCOMPLETE`, triggers Codex.
 - `INCOMPLETE` means core diff/worktree/context is inaccessible or meaningful code review cannot be
   performed. A project-specific test unavailable because of runner tooling is disclosed, not alone fatal.
 - Findings are successful review results; `REQUEST_CHANGES` does not trigger fallback.

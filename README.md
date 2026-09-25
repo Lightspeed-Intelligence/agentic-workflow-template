@@ -1,8 +1,8 @@
 # Agentic Workflow Template
 
 基于 GitHub Actions 的自动化工作流模板。自动处理 Issue 分析、需求评审、代码实现、
-文档维护和 PR 审查。所有 Agent workflow 都以固定版本 Codex 为主链路，技术失败时由
-独立 runner 中的 Claude Code 接手；Agent 不持有 GitHub 写凭据，外部副作用由确定性
+文档维护和 PR 审查。所有 Agent workflow 都以固定版本 Claude Code 为主链路，技术失败时由
+独立 runner 中的 Codex 接手；Agent 不持有 GitHub 写凭据，外部副作用由确定性
 publisher 执行。
 
 ## 快速开始
@@ -166,7 +166,7 @@ inputs:
 # pr-review.yml
 inputs:
   use_feishu_notify: true
-  # 可选：Claude fallback 的仓库特定只读 Git 工具模式；不得放行 git -C <path>:*。
+  # 可选：Claude Code 主链路的仓库特定只读 Git 工具模式；不得放行 git -C <path>:*。
   extra_allowed_tools: 'Bash(git -C tipsy-app diff:*),Bash(git -C tipsy-app log:*)'
 
 # 五个 workflow 都接受可选的环境准备脚本；留空则不执行。
@@ -228,8 +228,8 @@ pr-review:
   消费仓库可选的 `.github/agentic/validate.sh` 仍然只能使用 runner 预装的工具链。
   这是有意为之：validator 的职责是在未经审查的候选提交上把关，不宜在其中准备环境。
 
-四个 Issue/文档 workflow 与 PR 审查都优先使用 Codex + GPT-5.6-sol。进程失败、schema
-失败或结构化失败状态会在全新 runner 中启动 Claude Code + `claude-opus-5` fallback。
+四个 Issue/文档 workflow 与 PR 审查都优先使用 Claude Code + `claude-opus-5-5`。进程失败、schema
+失败或结构化失败状态会在全新 runner 中启动 Codex + `gpt-6-sol` fallback。
 有效的 `BLOCKED` / `NO_CHANGES` 是业务结果，不触发 fallback。
 
 纯回答 workflow 只跨 job 传递 JSON artifact；写代码 workflow 传递单父提交 Git bundle，
@@ -237,7 +237,7 @@ pr-review:
 checkout 凭据不持久化。只有最终 `answer`、`dispatch`、`implement`、`update` job 执行评论、
 push 或创建 PR；这些名称刻意保持稳定，以兼容下游 ruleset。
 
-PR 审查评论同样由单独的发布 job 校验结构化结果后代发。Codex 即使退出码为
+PR 审查评论同样由单独的发布 job 校验结构化结果后代发。Claude Code 即使退出码为
 0，只要结构化 `review_status` 为 `INCOMPLETE`，也会被视为软失败并触发 fallback；
 自由文本中的错误字样不会被误当成运行状态。
 只有核心 diff/工作树不可访问或无法完成有意义的代码审查时才应标记
@@ -324,7 +324,7 @@ Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有
   "cost": "small | medium | large | extra-large | n/a", // feature only
   "auto_fix_eligible": false,
   "result_status": "COMPLETE",
-  "reviewer": "codex | claude"
+  "reviewer": "claude | codex"
 }
 
 // implement
@@ -345,16 +345,16 @@ Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有
   "critical_count": 0,
   "important_count": 1,
   "suggestion_count": 2,
-  "reviewer": "codex | claude",
-  "model": "gpt-5.6-sol | claude-opus-5"
+  "reviewer": "claude | codex",
+  "model": "claude-opus-5-5 | gpt-6-sol"
 }
 
 // question
 {
   "description": "回答内容摘要",
   "result_status": "COMPLETE",
-  "reviewer": "codex | claude",
-  "model": "gpt-5.6-sol | claude-opus-5"
+  "reviewer": "claude | codex",
+  "model": "claude-opus-5-5 | gpt-6-sol"
 }
 ```
 

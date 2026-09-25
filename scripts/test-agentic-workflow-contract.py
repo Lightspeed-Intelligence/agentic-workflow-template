@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline contract tests for Codex-primary agentic workflows."""
+"""Offline contract tests for Claude-primary agentic workflows."""
 
 from __future__ import annotations
 
@@ -115,7 +115,10 @@ def test_provider_and_permission_boundaries() -> None:
         assert text.count("api_key: ${{ secrets.OPENAI_API_KEY || secrets.ANTHROPIC_API_KEY }}") == 1
         assert text.count("base_url: ${{ secrets.OPENAI_BASE_URL || secrets.ANTHROPIC_BASE_URL }}") == 1
         assert text.count("api_key: ${{ secrets.ANTHROPIC_API_KEY }}") == 1
-        assert text.count("model: claude-opus-5") == 1
+        assert text.count("model: claude-opus-5-5") == 1
+        assert text.count("model: gpt-6-sol") == 1
+        assert "gpt-5.6-sol" not in text
+        assert not re.search(r"claude-opus-5(?![-.\w])", text)
         assert "fable-5" not in text.lower()
         assert "github_token:" not in text
         assert "id-token:" not in text
@@ -149,11 +152,21 @@ def test_provider_and_permission_boundaries() -> None:
     assert "API_KEY" not in install_block
     assert "--ignore-scripts --no-audit --no-fund" in install_block
 
+    # pr-review 内联安装同一对 CLI；只升级其中一处会让主链路与 fallback 跑在不同版本上。
+    pr_review = (ROOT / ".github/workflows/pr-review.yml").read_text()
+    for package in ("@openai/codex", "@anthropic-ai/claude-code"):
+        versions = set(re.findall(rf"{re.escape(package)}@([0-9][0-9A-Za-z.+-]*)", action + pr_review))
+        assert len(versions) == 1, (package, versions)
+    for install_dir in set(re.findall(r"\$RUNNER_TEMP/((?:codex|claude-code)-[0-9][0-9.]*)", action + pr_review)):
+        name, version = install_dir.rsplit("-", 1)
+        package = "@openai/codex" if name == "codex" else "@anthropic-ai/claude-code"
+        assert f"{package}@{version}" in action, install_dir
+
 
 def test_fallback_and_artifact_flow() -> None:
     pure = {
-        "question": ("codex_answer", "claude_answer"),
-        "issue-dispatch": ("codex_analyze", "claude_analyze"),
+        "question": ("claude_answer", "codex_answer"),
+        "issue-dispatch": ("claude_analyze", "codex_analyze"),
     }
     for name, (primary, fallback) in pure.items():
         text = WORKFLOWS[name].read_text()
@@ -165,9 +178,10 @@ def test_fallback_and_artifact_flow() -> None:
 
     for name in ("implement", "update-llmdoc"):
         text = WORKFLOWS[name].read_text()
-        fallback = job_block(text, "claude_candidate")
-        assert "needs.codex_candidate.result != 'success'" in fallback
-        assert "needs.validate_codex.result != 'success'" in fallback
+        fallback = job_block(text, "codex_candidate")
+        assert "needs.claude_candidate.result != 'success'" in fallback
+        assert "needs.validate_claude.result != 'success'" in fallback
+        assert text.index("  claude_candidate:") < text.index("  codex_candidate:")
         assert "-validated-codex" in text and "-validated-claude" in text
         publisher = job_block(text, name if name == "implement" else "update")
         assert "validated-candidate" in publisher
@@ -212,7 +226,7 @@ def test_answer_normalizers() -> None:
             output = root / "output.json"
             source.write_text(json.dumps(value))
             return run([
-                str(normalizer), str(source), str(output), "codex", "gpt-5.6-sol", mode,
+                str(normalizer), str(source), str(output), "codex", "gpt-6-sol", mode,
             ], check=False).returncode == 0
 
         common = {
@@ -284,7 +298,7 @@ def test_change_artifact_scripts() -> None:
         artifact = root / "artifact"
         run([
             str(package), str(raw), str(repo), str(artifact), base,
-            "codex", "gpt-5.6-sol", "implement",
+            "codex", "gpt-6-sol", "implement",
         ])
         git(repo, "reset", "-q", "--hard", base)
         env = os.environ.copy()
@@ -302,7 +316,7 @@ def test_change_artifact_scripts() -> None:
         no_change_artifact = root / "no-change-artifact"
         run([
             str(package), str(no_change_raw), str(no_change_repo), str(no_change_artifact),
-            no_change_base, "claude", "claude-opus-5", "implement",
+            no_change_base, "claude", "claude-opus-5-5", "implement",
         ])
         run([str(validate), str(no_change_artifact), str(no_change_repo), "implement"], env=env)
         assert not (no_change_artifact / "candidate.bundle").exists()
@@ -315,7 +329,7 @@ def test_change_artifact_scripts() -> None:
         assert run([
             str(package), str(dirty_no_change_raw), str(dirty_no_change_repo),
             str(root / "dirty-no-change-artifact"), dirty_no_change_base,
-            "codex", "gpt-5.6-sol", "implement",
+            "codex", "gpt-6-sol", "implement",
         ], check=False).returncode != 0
 
         git(dirty_no_change_repo, "reset", "-q", "--hard", dirty_no_change_base)
@@ -323,7 +337,7 @@ def test_change_artifact_scripts() -> None:
         assert run([
             str(package), str(dirty_no_change_raw), str(dirty_no_change_repo),
             str(root / "untracked-no-change-artifact"), dirty_no_change_base,
-            "codex", "gpt-5.6-sol", "implement",
+            "codex", "gpt-6-sol", "implement",
         ], check=False).returncode != 0
 
         docs_repo = root / "docs-repo"
@@ -333,7 +347,7 @@ def test_change_artifact_scripts() -> None:
         docs_raw.write_text(json.dumps(change_result()))
         rejected = run([
             str(package), str(docs_raw), str(docs_repo), str(root / "docs-artifact"),
-            docs_base, "codex", "gpt-5.6-sol", "update-llmdoc",
+            docs_base, "codex", "gpt-6-sol", "update-llmdoc",
         ], check=False)
         assert rejected.returncode != 0
 
@@ -350,7 +364,7 @@ def test_change_artifact_scripts() -> None:
         add_artifact = root / "gitlink-add-artifact"
         run([
             str(package), str(add_raw), str(add_repo), str(add_artifact), add_base,
-            "codex", "gpt-5.6-sol", "implement",
+            "codex", "gpt-6-sol", "implement",
         ])
         assert json.loads((add_artifact / "manifest.json").read_text())["outcome"] == "BLOCKED"
         assert not (add_artifact / "candidate.bundle").exists()
@@ -373,7 +387,7 @@ def test_change_artifact_scripts() -> None:
         assert run([
             str(package), str(dirty_submodule_no_change), str(gitlink_repo),
             str(root / "dirty-submodule-no-change-artifact"), gitlink_base,
-            "codex", "gpt-5.6-sol", "implement",
+            "codex", "gpt-6-sol", "implement",
         ], check=False).returncode != 0
 
         (gitlink_repo / "file.txt").write_text("base\ntop-level\n")
@@ -382,7 +396,7 @@ def test_change_artifact_scripts() -> None:
         dirty_artifact = root / "gitlink-dirty-artifact"
         run([
             str(package), str(dirty_raw), str(gitlink_repo), str(dirty_artifact), gitlink_base,
-            "codex", "gpt-5.6-sol", "implement",
+            "codex", "gpt-6-sol", "implement",
         ])
         assert json.loads((dirty_artifact / "manifest.json").read_text())["outcome"] == "BLOCKED"
         assert not (dirty_artifact / "candidate.bundle").exists()
@@ -396,7 +410,7 @@ def test_change_artifact_scripts() -> None:
         modify_artifact = root / "gitlink-modify-artifact"
         run([
             str(package), str(modify_raw), str(gitlink_repo), str(modify_artifact), gitlink_base,
-            "codex", "gpt-5.6-sol", "implement",
+            "codex", "gpt-6-sol", "implement",
         ])
         assert json.loads((modify_artifact / "manifest.json").read_text())["outcome"] == "BLOCKED"
 
@@ -407,7 +421,7 @@ def test_change_artifact_scripts() -> None:
         delete_artifact = root / "gitlink-delete-artifact"
         run([
             str(package), str(delete_raw), str(gitlink_repo), str(delete_artifact), gitlink_base,
-            "codex", "gpt-5.6-sol", "implement",
+            "codex", "gpt-6-sol", "implement",
         ])
         assert json.loads((delete_artifact / "manifest.json").read_text())["outcome"] == "BLOCKED"
 
@@ -425,7 +439,7 @@ def test_change_artifact_scripts() -> None:
         bundle_sha = hashlib.sha256((bypass / "candidate.bundle").read_bytes()).hexdigest()
         changed_files = git(gitlink_repo, "diff", "--name-only", f"{gitlink_base}..{delete_candidate}").splitlines()
         bypass_result = change_result()
-        bypass_result.update({"reviewer": "codex", "model": "gpt-5.6-sol"})
+        bypass_result.update({"reviewer": "codex", "model": "gpt-6-sol"})
         (bypass / "result.json").write_text(json.dumps(bypass_result))
         (bypass / "manifest.json").write_text(json.dumps({
             "version": 1,
@@ -435,7 +449,7 @@ def test_change_artifact_scripts() -> None:
             "bundle_sha256": bundle_sha,
             "changed_files": changed_files,
             "reviewer": "codex",
-            "model": "gpt-5.6-sol",
+            "model": "gpt-6-sol",
         }))
         git(gitlink_repo, "reset", "-q", "--hard", gitlink_base)
         validator_rejected = run([

@@ -87,8 +87,8 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  codex_answer:
-    name: Answer with Codex (primary)
+  claude_answer:
+    name: Answer with Claude Code (primary)
     needs: prepare
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -109,7 +109,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 9707951e1c24ed16af00fdff0d94cc510a78c82c
+          ref: befe141677fd1a4cfb786b73f752021f7a02d385
           path: runtime
           sparse-checkout: |
             .github/actions/run-agent
@@ -166,38 +166,38 @@ jobs:
             "$RUNNER_TEMP/prompt.txt" \
             review
 
-      - name: Answer with Codex
+      - name: Answer with Claude Code
         uses: ./runtime/.github/actions/run-agent
         with:
-          provider: codex
-          model: gpt-5.6-sol
-          api_key: ${{ secrets.OPENAI_API_KEY || secrets.ANTHROPIC_API_KEY }}
-          base_url: ${{ secrets.OPENAI_BASE_URL || secrets.ANTHROPIC_BASE_URL }}
+          provider: claude
+          model: claude-opus-5-5
+          api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          base_url: ${{ secrets.ANTHROPIC_BASE_URL }}
           workspace: ${{ github.workspace }}/consumer
           prompt_file: ${{ runner.temp }}/prompt.txt
           schema_file: ${{ runner.temp }}/result-schema.json
           result_file: ${{ runner.temp }}/raw-result.json
 
-      - name: Normalize Codex result
+      - name: Normalize Claude result
         run: |
           mkdir -p "$RUNNER_TEMP/agent-result"
           bash runtime/.github/scripts/agentic/normalize-answer-result.sh \
             "$RUNNER_TEMP/raw-result.json" "$RUNNER_TEMP/agent-result/result.json" \
-            codex gpt-5.6-sol question
+            claude claude-opus-5-5 question
 
-      - name: Upload Codex answer
+      - name: Upload Claude answer
         uses: actions/upload-artifact@v4
         with:
-          name: question-result-codex
+          name: question-result-claude
           path: ${{ runner.temp }}/agent-result/result.json
           if-no-files-found: error
           overwrite: true
           retention-days: 1
 
-  claude_answer:
-    name: Answer with Claude Code (fallback)
-    needs: [prepare, codex_answer]
-    if: always() && needs.prepare.result == 'success' && needs.codex_answer.result != 'success'
+  codex_answer:
+    name: Answer with Codex (fallback)
+    needs: [prepare, claude_answer]
+    if: always() && needs.prepare.result == 'success' && needs.claude_answer.result != 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -217,7 +217,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 9707951e1c24ed16af00fdff0d94cc510a78c82c
+          ref: befe141677fd1a4cfb786b73f752021f7a02d385
           path: runtime
           sparse-checkout: |
             .github/actions/run-agent
@@ -249,7 +249,7 @@ jobs:
           }
           SCHEMA
           cat > "$RUNNER_TEMP/prompt.txt" <<PROMPT
-          Codex 主链路失败。阅读以下可信规范：
+          Claude Code 主链路失败。阅读以下可信规范：
           - $GITHUB_WORKSPACE/runtime/.claude/skills/answer-question/SKILL.md
           - $GITHUB_WORKSPACE/runtime/.claude/skills/github-comment/SKILL.md
 
@@ -261,7 +261,7 @@ jobs:
           代码链接必须使用 task.json 中的 repository 和完整 source_sha。
           PROMPT
 
-      # 与 Codex job 同一处理：输入已冻结，准备脚本只影响验证工具链。
+      # 与 Claude Code job 同一处理：输入已冻结，准备脚本只影响验证工具链。
       - name: Run repository setup script
         timeout-minutes: 15
         env:
@@ -274,29 +274,29 @@ jobs:
             "$RUNNER_TEMP/prompt.txt" \
             review
 
-      - name: Answer with Claude Code
+      - name: Answer with Codex
         uses: ./runtime/.github/actions/run-agent
         with:
-          provider: claude
-          model: claude-opus-5
-          api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          base_url: ${{ secrets.ANTHROPIC_BASE_URL }}
+          provider: codex
+          model: gpt-6-sol
+          api_key: ${{ secrets.OPENAI_API_KEY || secrets.ANTHROPIC_API_KEY }}
+          base_url: ${{ secrets.OPENAI_BASE_URL || secrets.ANTHROPIC_BASE_URL }}
           workspace: ${{ github.workspace }}/consumer
           prompt_file: ${{ runner.temp }}/prompt.txt
           schema_file: ${{ runner.temp }}/result-schema.json
           result_file: ${{ runner.temp }}/raw-result.json
 
-      - name: Normalize Claude result
+      - name: Normalize Codex result
         run: |
           mkdir -p "$RUNNER_TEMP/agent-result"
           bash runtime/.github/scripts/agentic/normalize-answer-result.sh \
             "$RUNNER_TEMP/raw-result.json" "$RUNNER_TEMP/agent-result/result.json" \
-            claude claude-opus-5 question
+            codex gpt-6-sol question
 
-      - name: Upload Claude answer
+      - name: Upload Codex answer
         uses: actions/upload-artifact@v4
         with:
-          name: question-result-claude
+          name: question-result-codex
           path: ${{ runner.temp }}/agent-result/result.json
           if-no-files-found: error
           overwrite: true
@@ -304,7 +304,7 @@ jobs:
 
   answer:
     name: answer
-    needs: [prepare, codex_answer, claude_answer]
+    needs: [prepare, claude_answer, codex_answer]
     if: always() && needs.prepare.result != 'skipped'
     runs-on: ubuntu-latest
     permissions:
@@ -315,23 +315,23 @@ jobs:
       reviewer: ${{ steps.publish.outputs.reviewer }}
       result_status: ${{ steps.publish.outputs.result_status }}
     steps:
-      - name: Download Codex answer
-        if: needs.codex_answer.result == 'success'
-        uses: actions/download-artifact@v4
-        with:
-          name: question-result-codex
-          path: ${{ runner.temp }}/agent-result
-
       - name: Download Claude answer
-        if: needs.codex_answer.result != 'success' && needs.claude_answer.result == 'success'
+        if: needs.claude_answer.result == 'success'
         uses: actions/download-artifact@v4
         with:
           name: question-result-claude
           path: ${{ runner.temp }}/agent-result
 
+      - name: Download Codex answer
+        if: needs.claude_answer.result != 'success' && needs.codex_answer.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: question-result-codex
+          path: ${{ runner.temp }}/agent-result
+
       - name: Validate and publish answer
         id: publish
-        if: needs.codex_answer.result == 'success' || needs.claude_answer.result == 'success'
+        if: needs.claude_answer.result == 'success' || needs.codex_answer.result == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -345,8 +345,8 @@ jobs:
             (.description | type == "string" and length > 0 and length <= 500 and (test("[\\r\\n]") | not)) and
             (.result_status == "COMPLETE") and
             (.comment_body | type == "string" and length > 0 and length <= 60000) and
-            ((.reviewer == "codex" and .model == "gpt-5.6-sol") or
-             (.reviewer == "claude" and .model == "claude-opus-5"))
+            ((.reviewer == "codex" and .model == "gpt-6-sol") or
+             (.reviewer == "claude" and .model == "claude-opus-5-5"))
           ' "$RESULT_FILE" > /dev/null
 
           reviewer=$(jq -r '.reviewer' "$RESULT_FILE")
@@ -388,9 +388,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fail when no answer succeeded
-        if: always() && needs.codex_answer.result != 'success' && needs.claude_answer.result != 'success'
+        if: always() && needs.claude_answer.result != 'success' && needs.codex_answer.result != 'success'
         run: |
-          echo "::error::Codex 主链路与 Claude Code fallback 均执行失败"
+          echo "::error::Claude Code 主链路与 Codex fallback 均执行失败"
           exit 1
 
   notify:
@@ -405,7 +405,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 9707951e1c24ed16af00fdff0d94cc510a78c82c
+          ref: befe141677fd1a4cfb786b73f752021f7a02d385
           path: runtime
           sparse-checkout: .github/actions/feishu-notify
           sparse-checkout-cone-mode: false

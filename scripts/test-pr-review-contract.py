@@ -84,7 +84,7 @@ def state(head: str, *, critical: int = 0, important: int = 0, suggestion: int =
         "important_count": important,
         "suggestion_count": suggestion,
         "reviewer": "codex",
-        "model": "gpt-5.6-sol",
+        "model": "gpt-6-sol",
     }
 
 
@@ -217,13 +217,13 @@ def test_publisher_gate(workflow: str) -> None:
         "suggestion_count": 0,
         "comment_body": "## review",
         "reviewer": "codex",
-        "model": "gpt-5.6-sol",
+        "model": "gpt-6-sol",
     }
     assert jq_accepts(program, valid)
 
     request_changes = valid | {
         "conclusion": "REQUEST_CHANGES", "important_count": 1,
-        "reviewer": "claude", "model": "claude-opus-5",
+        "reviewer": "claude", "model": "claude-opus-5-5",
     }
     assert jq_accepts(program, request_changes)
 
@@ -236,13 +236,16 @@ def test_publisher_gate(workflow: str) -> None:
         valid | {"important_count": 0.5},
         valid | {"description": "bad\nsummary"},
         valid | {"comment_body": ""},
-        valid | {"model": "claude-opus-5"},
+        valid | {"model": "claude-opus-5-5"},
+        valid | {"model": "gpt-5.6-sol"},
+        request_changes | {"model": "claude-opus-5"},
     ]
     for value in invalid_values:
         assert not jq_accepts(program, value), value
 
     assert ".review_status == \"COMPLETE\"" in workflow
-    assert "needs.codex_review.result != 'success'" in workflow
+    assert "needs.claude_review.result != 'success'" in job_block(workflow, "codex_review")
+    assert workflow.index("  claude_review:") < workflow.index("  codex_review:")
     assert "if: needs.codex_review.result == 'success'" in workflow
     assert "if: needs.claude_review.result == 'success'" in workflow
     assert body.index("STATE_B64=") < body.index("gh pr comment")
@@ -348,8 +351,8 @@ def test_setup_hook_wiring(workflow: str) -> None:
 
     # 位置必须在审查范围冻结之后：diff/commit 列表已写入 RUNNER_TEMP，准备脚本无法
     # 再影响审查哪些改动；同时仍在安装 CLI 之前，它写入的 PATH 对 Agent 有效。
-    # 必须逐 job 切片：在整份 workflow 文本上用 str.index 只会命中 codex job 那一处，
-    # claude fallback 的顺序实际不会被检查。
+    # 必须逐 job 切片：在整份 workflow 文本上用 str.index 只会命中 claude 主链路那一处，
+    # codex fallback 的顺序实际不会被检查。
     for job, cli in (
         ("codex_review", "Install pinned Codex CLI"),
         ("claude_review", "Install pinned Claude Code CLI"),
@@ -646,14 +649,17 @@ def test_model_secret_routing(workflow: str, caller: str) -> None:
 
 
 def test_model_names(workflow: str, readme: str, question_workflow: str) -> None:
-    assert workflow.count("--model claude-opus-5") == 1
+    assert workflow.count("--model claude-opus-5-5") == 1
+    assert workflow.count('model = "gpt-6-sol"') == 1
     assert "claude-opus-4-8" not in workflow
+    assert "gpt-5.6-sol" not in workflow
+    assert not re.search(r"claude-opus-5(?![-.\w])", workflow)
 
     pr_example = re.search(r"// pr-review\n\{.*?\n\}", readme, re.DOTALL)
     question_example = re.search(r"// question\n\{.*?\n\}", readme, re.DOTALL)
-    assert pr_example and '"model": "gpt-5.6-sol | claude-opus-5"' in pr_example.group(0)
-    assert question_example and '"model": "gpt-5.6-sol | claude-opus-5"' in question_example.group(0)
-    assert "model: claude-opus-5" in question_workflow
+    assert pr_example and '"model": "claude-opus-5-5 | gpt-6-sol"' in pr_example.group(0)
+    assert question_example and '"model": "claude-opus-5-5 | gpt-6-sol"' in question_example.group(0)
+    assert "model: claude-opus-5-5" in question_workflow
 
 
 def test_checkout_credentials(workflow: str, caller: str) -> None:

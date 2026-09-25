@@ -10,8 +10,8 @@ Allow deep local code analysis while preventing model-driven processes from writ
 pull_request event
   -> deterministic preparation: authenticate structured Bot history, select full/incremental range
   -> optional base-pinned setup_script: self-bounded 13m, non-fatal, disclosed in the prompt
-  -> codex_review: read-only token, full local execution, gpt-5.6-sol
-  -> on process/schema/soft failure: independent claude_review, read-only token, claude-opus-5
+  -> claude_review: read-only token, full local execution, claude-opus-5-5
+  -> on process/schema/soft failure: independent codex_review, read-only token, gpt-6-sol
   -> one-day structured artifact
   -> publish: deterministic validation, pull-requests: write, gh pr comment
   -> optional Feishu notification
@@ -41,7 +41,7 @@ pull_request event
 
 ## Credential Invariants
 
-- `codex_review` and `claude_review`: only `contents: read` and `pull-requests: read`.
+- `claude_review` and `codex_review`: only `contents: read` and `pull-requests: read`.
 - Reviewer PR-head checkouts may use optional `PAT_TOKEN` to read cross-repository private
   submodules and use `persist-credentials: false`; trusted-policy checkout and preparation use the
   read-only job token. Agent processes receive model credentials but no GitHub/PAT token.
@@ -73,10 +73,10 @@ is a configuration error and fails the job; runtime failure is an environment co
   prior authenticated state has zero critical/important and 1–3 suggestion findings, and cutoff is
   a strict ancestor of head; otherwise fail closed to full review.
 - Publisher appends the machine-readable state marker after model prose; the Agent cannot choose it.
-- Codex success requires process success, schema/count validation and structured `review_status=COMPLETE`; `INCOMPLETE` is an exit-zero soft-failure signal.
+- Claude success requires process success, schema/count validation and structured `review_status=COMPLETE`; `INCOMPLETE` is an exit-zero soft-failure signal.
 - `INCOMPLETE` is reserved for inaccessible core review inputs or inability to perform meaningful
   code analysis. An unavailable project-specific test/tool is recorded but is not sufficient alone.
-- Claude runs only when the whole Codex job is non-success and uses a fresh runner.
+- Codex runs only when the whole Claude job is non-success and uses a fresh runner.
 - The artifact includes `comment_body`; public `structured_output` removes it but retains reviewer/model identity.
 - Publisher revalidates `review_status=COMPLETE`, type, length, count/conclusion semantics and the reviewer/model pair before commenting.
 

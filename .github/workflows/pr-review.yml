@@ -1,6 +1,6 @@
 # Reusable Workflow: PR Review
-# 自动审查 PR：Codex (gpt-5.6-sol) 为主链路，失败时由 Claude Code
-# (claude-opus-5) fallback。两个 Agent 都拥有完整的本地执行权限，但所在 job 的
+# 自动审查 PR：Claude Code (claude-opus-5-5) 为主链路，失败时由 Codex
+# (gpt-6-sol) fallback。两个 Agent 都拥有完整的本地执行权限，但所在 job 的
 # GitHub token 只有只读权限且不注入 Agent 进程；评论由隔离的发布 job 代发。
 name: PR Review (Reusable)
 
@@ -12,7 +12,7 @@ on:
         type: boolean
         default: true
       extra_allowed_tools:
-        description: "Claude fallback 的额外只读 Git 工具模式（逗号分隔），仅接受 Bash(git -C <path> <read-only-subcommand>:*)；这是仓库特定工具提示，不是权限安全边界"
+        description: "Claude Code 主链路的额外只读 Git 工具模式（逗号分隔），仅接受 Bash(git -C <path> <read-only-subcommand>:*)；这是仓库特定工具提示，不是权限安全边界"
         type: string
         default: ""
       setup_script:
@@ -42,8 +42,8 @@ on:
 jobs:
   # Agent job 只持有只读 GITHUB_TOKEN。checkout 临时使用该 token 后立即移除
   # Git 凭据；Agent 步骤本身仅收到模型 API key，不收到 GitHub token 或 PAT。
-  codex_review:
-    name: Review with Codex (primary)
+  claude_review:
+    name: Review with Claude Code (primary)
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -81,7 +81,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 9707951e1c24ed16af00fdff0d94cc510a78c82c
+          ref: befe141677fd1a4cfb786b73f752021f7a02d385
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review
@@ -218,60 +218,84 @@ jobs:
             "$RUNNER_TEMP/review-prompt.txt" \
             review
 
-      - name: Install pinned Codex CLI without lifecycle scripts
+      - name: Install pinned Claude Code CLI without lifecycle scripts
         run: |
-          CODEX_INSTALL_DIR="$RUNNER_TEMP/codex-0.145.0"
+          CLAUDE_INSTALL_DIR="$RUNNER_TEMP/claude-code-2.1.282"
           npm install --ignore-scripts --no-audit --no-fund \
-            --prefix "$CODEX_INSTALL_DIR" @openai/codex@0.145.0
-          "$CODEX_INSTALL_DIR/node_modules/.bin/codex" --version
+            --prefix "$CLAUDE_INSTALL_DIR" @anthropic-ai/claude-code@2.1.282
+          CLAUDE_WRAPPER="$CLAUDE_INSTALL_DIR/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs"
+          test -f "$CLAUDE_WRAPPER"
+          node "$CLAUDE_WRAPPER" --version
 
-      - name: Review with Codex and GPT-5.6-sol
+      - name: Review with Claude Code and Claude Opus 5.5
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || secrets.ANTHROPIC_API_KEY }}
-          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL || secrets.ANTHROPIC_BASE_URL }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+          ANTHROPIC_CUSTOM_HEADERS: "Authorization: Bearer ${{ secrets.ANTHROPIC_API_KEY }}"
+          DISABLE_AUTOUPDATER: "1"
+          EXTRA_ALLOWED_TOOLS: ${{ inputs.extra_allowed_tools }}
         run: |
-          CODEX_PATH="$RUNNER_TEMP/codex-0.145.0/node_modules/.bin/codex"
+          BASE_URL="${ANTHROPIC_BASE_URL:-https://llm.fantacy.live}"
+          export ANTHROPIC_BASE_URL="${BASE_URL%/}"
 
-          export CODEX_HOME="$RUNNER_TEMP/codex-home"
-          mkdir -p "$CODEX_HOME"
-          BASE_URL="${OPENAI_BASE_URL:-https://llm.fantacy.live}"
-          cat > "$CODEX_HOME/config.toml" <<EOF
-          model = "gpt-5.6-sol"
-          model_provider = "gateway"
-          service_tier = "priority"
+          CLAUDE_WRAPPER="$RUNNER_TEMP/claude-code-2.1.282/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs"
 
-          [model_providers.gateway]
-          name = "gateway"
-          base_url = "${BASE_URL%/}/v1"
-          env_key = "OPENAI_API_KEY"
-          wire_api = "responses"
-          EOF
-
-          LAST_MSG="$RUNNER_TEMP/review-last-message.json"
-          SAFE_ROOT="$RUNNER_TEMP/codex-review-root"
+          SCHEMA=$(jq -c . "$RUNNER_TEMP/review-schema.json")
+          RAW_RESULT="$RUNNER_TEMP/claude-result.json"
+          SAFE_ROOT="$RUNNER_TEMP/claude-review-root"
+          EXTRA_TOOL_ARGS=()
+          if [ -n "$EXTRA_ALLOWED_TOOLS" ]; then
+            case "$EXTRA_ALLOWED_TOOLS" in
+              *$'\n'*|*$'\r'*)
+                echo "::error::extra_allowed_tools 不允许换行符"
+                exit 1
+                ;;
+            esac
+            IFS=',' read -ra TOOL_PATTERNS <<< "$EXTRA_ALLOWED_TOOLS"
+            for pattern in "${TOOL_PATTERNS[@]}"; do
+              # 仅接受仓库子目录上的只读 Git 子命令。禁止覆盖整个 `git -C`
+              # 命令空间、shell 展开和写操作。真正的安全边界仍是只读 job token
+              # 与不向 Agent 进程注入 GitHub 凭据。
+              if ! grep -Eq '^Bash\(git[[:space:]]+-C[[:space:]]+[A-Za-z0-9._/-]+[[:space:]]+(diff|log|show|status|rev-parse|merge-base|ls-files)([[:space:]][A-Za-z0-9._/=:,+@%-]+)*:\*\)$' <<< "$pattern"; then
+                echo "::error::extra_allowed_tools 仅允许仓库子目录上的只读 Git 工具模式"
+                exit 1
+              fi
+              tool_path="${pattern#Bash(git -C }"
+              tool_path="${tool_path%% *}"
+              case "/$tool_path/" in
+                *"/../"*|*"/./"*|*"//"*)
+                  echo "::error::extra_allowed_tools 路径必须是规范化的仓库相对路径"
+                  exit 1
+                  ;;
+              esac
+              EXTRA_TOOL_ARGS+=(--allowedTools "$pattern")
+            done
+          fi
           mkdir -p "$SAFE_ROOT"
-          # GitHub 托管 runner 上 Codex 自带的 bubblewrap 可能因无法配置 loopback
-          # 网络而在沙箱初始化阶段失败。任务明确允许 Agent 在一次性 runner 中拥有
-          # 完整本地执行权限，因此这里使用比 --sandbox danger-full-access 更彻底的
-          # bypass 选项，同时把 GitHub 影响面收敛在 job 的只读 token/无凭据进程边界。
-          "$CODEX_PATH" exec \
-            --cd "$SAFE_ROOT" \
-            --add-dir "$GITHUB_WORKSPACE" \
-            --skip-git-repo-check \
-            --ephemeral \
-            --ignore-rules \
-            --dangerously-bypass-approvals-and-sandbox \
-            --output-schema "$RUNNER_TEMP/review-schema.json" \
-            --output-last-message "$LAST_MSG" \
-            - < "$RUNNER_TEMP/review-prompt.txt"
+          cd "$SAFE_ROOT"
+          node "$CLAUDE_WRAPPER" -p \
+            --bare \
+            --no-session-persistence \
+            --model claude-opus-5-5 \
+            --dangerously-skip-permissions \
+            "${EXTRA_TOOL_ARGS[@]}" \
+            --output-format json \
+            --json-schema "$SCHEMA" \
+            < "$RUNNER_TEMP/review-prompt.txt" > "$RAW_RESULT"
 
-          test -s "$LAST_MSG"
-          mkdir -p review-output
-          jq -c '. + {reviewer: "codex", model: "gpt-5.6-sol"}' \
-            "$LAST_MSG" > review-output/review.json
+          jq -e '(.is_error? // false) == false' "$RAW_RESULT" > /dev/null
+          mkdir -p "$GITHUB_WORKSPACE/review-output"
+          jq -c '
+            if (.structured_output? | type) == "object" then .structured_output
+            elif (has("conclusion") and has("comment_body")) then .
+            else error("Claude 未产出结构化审查结果")
+            end
+            | . + {reviewer: "claude", model: "claude-opus-5-5"}
+          ' "$RAW_RESULT" > "$GITHUB_WORKSPACE/review-output/review.json"
           jq -e '
             (.description | type == "string" and length > 0 and length <= 500 and (test("[\\r\\n]") | not)) and
-            (.review_status | IN("COMPLETE", "INCOMPLETE")) and
+            (.review_status == "COMPLETE") and
             (.conclusion | IN("APPROVE", "REQUEST_CHANGES", "COMMENT")) and
             (.comment_body | type == "string" and length > 0 and length <= 60000) and
             (.critical_count | type == "number" and . >= 0 and floor == .) and
@@ -282,25 +306,22 @@ jobs:
               (.conclusion == "REQUEST_CHANGES" and (.critical_count > 0 or .important_count > 0)) or
               (.conclusion == "COMMENT" and .critical_count == 0 and .important_count == 0)
             )
-          ' review-output/review.json > /dev/null
-          # CLI 偶尔会以 0 退出并返回结构合法、但明确标记审查未完成的结果。
-          # 结构化状态避免对自由文本做易误报、易漏报的自然语言分类。
-          jq -e '.review_status == "COMPLETE"' review-output/review.json > /dev/null
+          ' "$GITHUB_WORKSPACE/review-output/review.json" > /dev/null
 
-      - name: Upload Codex review result
+      - name: Upload Claude review result
         uses: actions/upload-artifact@v4
         with:
-          name: review-result-codex
+          name: review-result-claude
           path: review-output/review.json
           if-no-files-found: error
           overwrite: true
           retention-days: 1
 
-  # 独立 runner 避免失败的 Codex 进程污染 fallback 的工作树、工具或输入。
-  claude_review:
-    name: Review with Claude Code (fallback)
-    needs: codex_review
-    if: always() && github.event.pull_request.draft == false && needs.codex_review.result != 'success'
+  # 独立 runner 避免失败的 Claude Code 进程污染 fallback 的工作树、工具或输入。
+  codex_review:
+    name: Review with Codex (fallback)
+    needs: claude_review
+    if: always() && github.event.pull_request.draft == false && needs.claude_review.result != 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -337,7 +358,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 9707951e1c24ed16af00fdff0d94cc510a78c82c
+          ref: befe141677fd1a4cfb786b73f752021f7a02d385
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review
@@ -429,7 +450,7 @@ jobs:
           仓库: ${{ github.repository }}
           仓库 URL: https://github.com/${{ github.repository }}
 
-          Codex 主链路失败。请作为 fallback 审查 PR #${{ github.event.pull_request.number }}。
+          Claude Code 主链路失败。请作为 fallback 审查 PR #${{ github.event.pull_request.number }}。
 
           审查材料已在本地准备好:
           - 可信审查规范（来自 template 固定 revision）:
@@ -460,7 +481,7 @@ jobs:
           - 代码链接必须使用完整 head commit SHA，不得使用分支名
           PROMPT_EOF
 
-      # 与 Codex job 同一处理：范围已冻结，准备脚本只影响验证工具链。
+      # 与 Claude Code job 同一处理：范围已冻结，准备脚本只影响验证工具链。
       - name: Run repository setup script
         timeout-minutes: 15
         env:
@@ -473,84 +494,60 @@ jobs:
             "$RUNNER_TEMP/review-prompt.txt" \
             review
 
-      - name: Install pinned Claude Code CLI without lifecycle scripts
+      - name: Install pinned Codex CLI without lifecycle scripts
         run: |
-          CLAUDE_INSTALL_DIR="$RUNNER_TEMP/claude-code-2.1.148"
+          CODEX_INSTALL_DIR="$RUNNER_TEMP/codex-0.156.1"
           npm install --ignore-scripts --no-audit --no-fund \
-            --prefix "$CLAUDE_INSTALL_DIR" @anthropic-ai/claude-code@2.1.148
-          CLAUDE_WRAPPER="$CLAUDE_INSTALL_DIR/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs"
-          test -f "$CLAUDE_WRAPPER"
-          node "$CLAUDE_WRAPPER" --version
+            --prefix "$CODEX_INSTALL_DIR" @openai/codex@0.156.1
+          "$CODEX_INSTALL_DIR/node_modules/.bin/codex" --version
 
-      - name: Review with Claude Code and Claude Opus 5
+      - name: Review with Codex and GPT-6-sol
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
-          ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
-          ANTHROPIC_CUSTOM_HEADERS: "Authorization: Bearer ${{ secrets.ANTHROPIC_API_KEY }}"
-          DISABLE_AUTOUPDATER: "1"
-          EXTRA_ALLOWED_TOOLS: ${{ inputs.extra_allowed_tools }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || secrets.ANTHROPIC_API_KEY }}
+          OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL || secrets.ANTHROPIC_BASE_URL }}
         run: |
-          BASE_URL="${ANTHROPIC_BASE_URL:-https://llm.fantacy.live}"
-          export ANTHROPIC_BASE_URL="${BASE_URL%/}"
+          CODEX_PATH="$RUNNER_TEMP/codex-0.156.1/node_modules/.bin/codex"
 
-          CLAUDE_WRAPPER="$RUNNER_TEMP/claude-code-2.1.148/node_modules/@anthropic-ai/claude-code/cli-wrapper.cjs"
+          export CODEX_HOME="$RUNNER_TEMP/codex-home"
+          mkdir -p "$CODEX_HOME"
+          BASE_URL="${OPENAI_BASE_URL:-https://llm.fantacy.live}"
+          cat > "$CODEX_HOME/config.toml" <<EOF
+          model = "gpt-6-sol"
+          model_provider = "gateway"
+          service_tier = "priority"
 
-          SCHEMA=$(jq -c . "$RUNNER_TEMP/review-schema.json")
-          RAW_RESULT="$RUNNER_TEMP/claude-result.json"
-          SAFE_ROOT="$RUNNER_TEMP/claude-review-root"
-          EXTRA_TOOL_ARGS=()
-          if [ -n "$EXTRA_ALLOWED_TOOLS" ]; then
-            case "$EXTRA_ALLOWED_TOOLS" in
-              *$'\n'*|*$'\r'*)
-                echo "::error::extra_allowed_tools 不允许换行符"
-                exit 1
-                ;;
-            esac
-            IFS=',' read -ra TOOL_PATTERNS <<< "$EXTRA_ALLOWED_TOOLS"
-            for pattern in "${TOOL_PATTERNS[@]}"; do
-              # 仅接受仓库子目录上的只读 Git 子命令。禁止覆盖整个 `git -C`
-              # 命令空间、shell 展开和写操作。真正的安全边界仍是只读 job token
-              # 与不向 Agent 进程注入 GitHub 凭据。
-              if ! grep -Eq '^Bash\(git[[:space:]]+-C[[:space:]]+[A-Za-z0-9._/-]+[[:space:]]+(diff|log|show|status|rev-parse|merge-base|ls-files)([[:space:]][A-Za-z0-9._/=:,+@%-]+)*:\*\)$' <<< "$pattern"; then
-                echo "::error::extra_allowed_tools 仅允许仓库子目录上的只读 Git 工具模式"
-                exit 1
-              fi
-              tool_path="${pattern#Bash(git -C }"
-              tool_path="${tool_path%% *}"
-              case "/$tool_path/" in
-                *"/../"*|*"/./"*|*"//"*)
-                  echo "::error::extra_allowed_tools 路径必须是规范化的仓库相对路径"
-                  exit 1
-                  ;;
-              esac
-              EXTRA_TOOL_ARGS+=(--allowedTools "$pattern")
-            done
-          fi
+          [model_providers.gateway]
+          name = "gateway"
+          base_url = "${BASE_URL%/}/v1"
+          env_key = "OPENAI_API_KEY"
+          wire_api = "responses"
+          EOF
+
+          LAST_MSG="$RUNNER_TEMP/review-last-message.json"
+          SAFE_ROOT="$RUNNER_TEMP/codex-review-root"
           mkdir -p "$SAFE_ROOT"
-          cd "$SAFE_ROOT"
-          node "$CLAUDE_WRAPPER" -p \
-            --bare \
-            --no-session-persistence \
-            --model claude-opus-5 \
-            --dangerously-skip-permissions \
-            "${EXTRA_TOOL_ARGS[@]}" \
-            --output-format json \
-            --json-schema "$SCHEMA" \
-            < "$RUNNER_TEMP/review-prompt.txt" > "$RAW_RESULT"
+          # GitHub 托管 runner 上 Codex 自带的 bubblewrap 可能因无法配置 loopback
+          # 网络而在沙箱初始化阶段失败。任务明确允许 Agent 在一次性 runner 中拥有
+          # 完整本地执行权限，因此这里使用比 --sandbox danger-full-access 更彻底的
+          # bypass 选项，同时把 GitHub 影响面收敛在 job 的只读 token/无凭据进程边界。
+          "$CODEX_PATH" exec \
+            --cd "$SAFE_ROOT" \
+            --add-dir "$GITHUB_WORKSPACE" \
+            --skip-git-repo-check \
+            --ephemeral \
+            --ignore-rules \
+            --dangerously-bypass-approvals-and-sandbox \
+            --output-schema "$RUNNER_TEMP/review-schema.json" \
+            --output-last-message "$LAST_MSG" \
+            - < "$RUNNER_TEMP/review-prompt.txt"
 
-          jq -e '(.is_error? // false) == false' "$RAW_RESULT" > /dev/null
-          mkdir -p "$GITHUB_WORKSPACE/review-output"
-          jq -c '
-            if (.structured_output? | type) == "object" then .structured_output
-            elif (has("conclusion") and has("comment_body")) then .
-            else error("Claude 未产出结构化审查结果")
-            end
-            | . + {reviewer: "claude", model: "claude-opus-5"}
-          ' "$RAW_RESULT" > "$GITHUB_WORKSPACE/review-output/review.json"
+          test -s "$LAST_MSG"
+          mkdir -p review-output
+          jq -c '. + {reviewer: "codex", model: "gpt-6-sol"}' \
+            "$LAST_MSG" > review-output/review.json
           jq -e '
             (.description | type == "string" and length > 0 and length <= 500 and (test("[\\r\\n]") | not)) and
-            (.review_status == "COMPLETE") and
+            (.review_status | IN("COMPLETE", "INCOMPLETE")) and
             (.conclusion | IN("APPROVE", "REQUEST_CHANGES", "COMMENT")) and
             (.comment_body | type == "string" and length > 0 and length <= 60000) and
             (.critical_count | type == "number" and . >= 0 and floor == .) and
@@ -561,12 +558,15 @@ jobs:
               (.conclusion == "REQUEST_CHANGES" and (.critical_count > 0 or .important_count > 0)) or
               (.conclusion == "COMMENT" and .critical_count == 0 and .important_count == 0)
             )
-          ' "$GITHUB_WORKSPACE/review-output/review.json" > /dev/null
+          ' review-output/review.json > /dev/null
+          # CLI 偶尔会以 0 退出并返回结构合法、但明确标记审查未完成的结果。
+          # 结构化状态避免对自由文本做易误报、易漏报的自然语言分类。
+          jq -e '.review_status == "COMPLETE"' review-output/review.json > /dev/null
 
-      - name: Upload Claude review result
+      - name: Upload Codex review result
         uses: actions/upload-artifact@v4
         with:
-          name: review-result-claude
+          name: review-result-codex
           path: review-output/review.json
           if-no-files-found: error
           overwrite: true
@@ -575,7 +575,7 @@ jobs:
   # 唯一拥有 PR 写权限的 job。它不运行 Agent，也不接收模型 API key。
   publish:
     name: review
-    needs: [codex_review, claude_review]
+    needs: [claude_review, codex_review]
     if: always() && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
@@ -584,13 +584,6 @@ jobs:
     outputs:
       structured_output: ${{ steps.result.outputs.structured_output }}
     steps:
-      - name: Download Codex review result
-        if: needs.codex_review.result == 'success'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: review-result-codex
-          path: .review-input
-
       - name: Download Claude review result
         if: needs.claude_review.result == 'success'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -598,9 +591,16 @@ jobs:
           name: review-result-claude
           path: .review-input
 
+      - name: Download Codex review result
+        if: needs.codex_review.result == 'success'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: review-result-codex
+          path: .review-input
+
       - name: Validate and publish review comment
         id: result
-        if: needs.codex_review.result == 'success' || needs.claude_review.result == 'success'
+        if: needs.claude_review.result == 'success' || needs.codex_review.result == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
           REVIEW_FILE: .review-input/review.json
@@ -620,17 +620,17 @@ jobs:
             ) and
             (.comment_body | type == "string" and length > 0 and length <= 60000) and
             (
-              (.reviewer == "codex" and .model == "gpt-5.6-sol") or
-              (.reviewer == "claude" and .model == "claude-opus-5")
+              (.reviewer == "codex" and .model == "gpt-6-sol") or
+              (.reviewer == "claude" and .model == "claude-opus-5-5")
             )
           ' "$REVIEW_FILE" > /dev/null
 
           jq -r '.comment_body' "$REVIEW_FILE" > "$RUNNER_TEMP/review-comment.md"
           REVIEWER=$(jq -r '.reviewer' "$REVIEW_FILE")
-          if [ "$REVIEWER" = "codex" ]; then
-            FOOTER="本次审查由 Codex 主链路 (gpt-5.6-sol) 完成。"
+          if [ "$REVIEWER" = "claude" ]; then
+            FOOTER="本次审查由 Claude Code 主链路 (claude-opus-5-5) 完成。"
           else
-            FOOTER="本次审查由 Claude Code fallback 链路 (claude-opus-5) 完成；Codex 主链路执行失败，详情见 workflow run。"
+            FOOTER="本次审查由 Codex fallback 链路 (gpt-6-sol) 完成；Claude Code 主链路执行失败，详情见 workflow run。"
           fi
           STATE_B64=$(jq -c \
             --arg head "${{ github.event.pull_request.head.sha }}" \
@@ -694,7 +694,7 @@ jobs:
 
           if [ "$RESULT_OUTCOME" = "success" ]; then
             DESCRIPTION="$REVIEW_DESCRIPTION"
-            [ "$REVIEWER" = "claude" ] && DESCRIPTION="${DESCRIPTION}（Claude Code fallback）"
+            [ "$REVIEWER" = "codex" ] && DESCRIPTION="${DESCRIPTION}（Codex fallback）"
             case "$CONCLUSION" in
               "APPROVE") STATUS="success" ;;
               # REQUEST_CHANGES 按严重度分级配色：有 BLOCKER(critical>0)才用红色 error；
@@ -776,7 +776,7 @@ jobs:
           exit 1
 
       - name: Fail when no reviewer succeeded
-        if: always() && needs.codex_review.result != 'success' && needs.claude_review.result != 'success'
+        if: always() && needs.claude_review.result != 'success' && needs.codex_review.result != 'success'
         run: |
-          echo "::error::Codex 主链路与 Claude Code fallback 均执行失败"
+          echo "::error::Claude Code 主链路与 Codex fallback 均执行失败"
           exit 1

@@ -4,7 +4,7 @@
 
 ## 一句话说清楚
 
-我们在 GitHub 上接入了 Codex 和 Claude Code，让它们像团队成员一样自动帮忙干活：PR 提上去由 Codex 优先审代码，Codex 失败时 Claude Code 自动接手；Issue 建出来仍可自动分析，评论里喊一声 `/impl` 还能直接写代码交 PR。
+我们在 GitHub 上接入了 Codex 和 Claude Code，让它们像团队成员一样自动帮忙干活：PR 提上去由 Claude Code 优先审代码，Claude Code 失败时 Codex 自动接手；Issue 建出来仍可自动分析，评论里喊一声 `/impl` 还能直接写代码交 PR。
 
 本文主要讲 **Code Review** 这部分。
 
@@ -19,13 +19,13 @@ sequenceDiagram
     participant Dev as 开发者
     participant GH as GitHub
     participant CI as GitHub Actions
-    participant AI as Codex / Claude Code
+    participant AI as Claude Code / Codex
     participant Pub as 发布 Job
     participant FS as 飞书群
 
     Dev->>GH: 提交 PR
     GH->>CI: 触发 pull_request 事件
-    CI->>AI: 先启动 Codex；失败才启动 Claude Code
+    CI->>AI: 先启动 Claude Code；失败才启动 Codex
     AI->>AI: 读取本地 PR diff + 代码
     AI->>AI: 按 Skill 规则审查
     AI->>CI: 返回结构化 JSON（不操作 GitHub）
@@ -127,9 +127,9 @@ question:
 flowchart TD
     A["Step 1: 只读 Checkout<br/>固定 PR head/base SHA<br/>可选 PAT 读私有 submodule<br/>不持久化 Git 凭据"]
     B["Step 2: 准备可信输入<br/>template 固定 commit 的单文件审查 Skill<br/>consumer base 的历史准备脚本<br/>选择 full / incremental diff"]
-    C["Step 3: Codex + GPT-5.6-sol<br/>完整本地执行权限"]
-    D{"Codex 进程、结构校验<br/>且无软失败信号?"}
-    E["Step 4: 独立 runner<br/>Claude Code + Claude Opus 5 fallback"]
+    C["Step 3: Claude Code + Claude Opus 5.5<br/>完整本地执行权限"]
+    D{"Claude Code 进程、结构校验<br/>且无软失败信号?"}
+    E["Step 4: 独立 runner<br/>Codex + GPT-6-sol fallback"]
     F["Step 5: 上传结构化结果 artifact"]
     G["Step 6: 独立发布 Job<br/>校验 JSON 后代发 PR 评论"]
     H["Step 7: Step Summary + 飞书通知"]
@@ -172,11 +172,11 @@ flowchart TD
 
 Agent 可以修改临时工作区，但既没有可持久化的 Git 凭据，也没有 GitHub 写 token，因此不能把影响推回仓库。
 
-Codex 使用完整本地权限时会绕过其内置 bubblewrap：GitHub 托管 runner 可能无法让
+Claude Code 主链路拥有完整本地权限；可选 `extra_allowed_tools` 仅声明仓库子目录中的
+只读 Git 工具模式，经过 allowlist 校验，不会扩大 GitHub 权限。
+Codex fallback 使用完整本地权限时会绕过其内置 bubblewrap：GitHub 托管 runner 可能无法让
 bubblewrap 配置 loopback，导致沙箱初始化先于审查失败。这里不把本地沙箱当作 GitHub
 安全边界；真正的边界是独立 runner、只读 job token、无持久化凭据和单独发布 Job。
-Claude fallback 也拥有完整本地权限；可选 `extra_allowed_tools` 仅声明仓库子目录中的
-只读 Git 工具模式，经过 allowlist 校验，不会扩大 GitHub 权限。
 
 ---
 
@@ -220,7 +220,7 @@ job 的只读 token 读取评论，只接受 `github-actions` App 发布的最�
 ```mermaid
 sequenceDiagram
     participant Dev as 开发者
-    participant AI as Codex / Claude Code
+    participant AI as Claude Code / Codex
     participant Pub as 发布 Job
 
     Dev->>AI: PR opened → 完整 base...head diff
@@ -306,8 +306,8 @@ Agent 的审查结果是一份结构化 JSON，评论正文也只是其中的待
   "important_count": 0,
   "suggestion_count": 2,
   "comment_body": "## PR 审查……",
-  "reviewer": "codex",
-  "model": "gpt-5.6-sol"
+  "reviewer": "claude",
+  "model": "claude-opus-5-5"
 }
 ```
 
@@ -317,7 +317,7 @@ Agent artifact 内含 `comment_body`；reusable workflow 的公开 `structured_o
 
 ```mermaid
 flowchart LR
-    AI["Codex / Claude Code 输出 JSON"] --> artifact["短期 artifact<br/>跨权限边界传递"]
+    AI["Claude Code / Codex 输出 JSON"] --> artifact["短期 artifact<br/>跨权限边界传递"]
     artifact --> jq["发布 Job 用 jq 校验"]
     jq --> comment["gh pr comment 代发"]
     jq --> summary["GitHub Step Summary<br/>(给人看的日志)"]
@@ -464,6 +464,6 @@ flowchart TD
 - **完整范围优先、可信小增量** — 仅经认证的 1–3 个小问题修复走增量，其余覆盖完整 PR diff
 - **结构化输出** — JSON Schema 让 AI 的结果可编程，驱动通知和统计
 - **权限分层** — Agent 对临时 runner 高权限、对 GitHub 只读；副作用集中到确定性发布 Job
-- **主备隔离** — Codex 优先，失败时 Claude Code 在新 runner 上接手，避免环境污染
-- **软失败可见** — Codex 即使以 0 退出，只要结构化 `review_status` 为 `INCOMPLETE`，也会触发 fallback，不依赖自由文本正则猜测
+- **主备隔离** — Claude Code 优先，失败时 Codex 在新 runner 上接手，避免环境污染
+- **软失败可见** — Claude Code 即使以 0 退出，只要结构化 `review_status` 为 `INCOMPLETE`，也会触发 fallback，不依赖自由文本正则猜测
 - **高信号策略** — 宁可漏报也不误报，维护团队对自动审查的信任
