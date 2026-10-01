@@ -94,6 +94,7 @@ runs:
             cat > "$CODEX_HOME/config.toml" <<EOF
         model = "$MODEL"
         model_provider = "gateway"
+        model_reasoning_effort = "medium"
 
         [model_providers.gateway]
         name = "gateway"
