@@ -574,8 +574,8 @@ def test_setup_hook_wiring() -> None:
     assert "-eq 124" in hook, "必须识别 GNU timeout 的超时退出码"
 
 
-def extract_dedented(text: str, start: str, end: str, offset: int = 0) -> str:
-    begin = text.index(start, offset)
+def extract_dedented(text: str, start: str, end: str) -> str:
+    begin = text.index(start)
     block = text[begin:text.index(end, begin)]
     lines = block.splitlines()
     indent = min(len(line) - len(line.lstrip()) for line in lines if line.strip())
@@ -677,6 +677,9 @@ def test_model_ids_are_consistent() -> None:
         lines = body.splitlines()
         indent = min(len(line) - len(line.lstrip()) for line in lines if line.strip())
         heredoc = "\n".join(line[indent:] for line in lines) + "\n"
+        # 渲染时未注入的变量会取默认值，"${X:-medium}" 能骗过下面的 TOML 断言；
+        # 所以在原始 heredoc 上要求恰好一行、且是不含展开的字面量。
+        assert re.findall(r"^model_reasoning_effort = (.*)$", heredoc, re.M) == ['"medium"'], (name, heredoc)
         rendered = run(
             ["bash", "-c", 'cat <<EOF\n' + heredoc + 'EOF\n'],
             env={"PATH": "/usr/bin:/bin", "MODEL": codex_model, "endpoint": "https://gateway.invalid/v1",
@@ -690,6 +693,27 @@ def test_model_ids_are_consistent() -> None:
                 for nested in values.values():
                     assert not (isinstance(nested, dict) and "model_reasoning_effort" in nested), (name, table)
                 assert "model_reasoning_effort" not in values, (name, table)
+
+    # config.toml 之外，exec 的 -c/--config/--profile/-m 也能覆盖模型和推理强度（CLI 参数优先于
+    # config）。固定两处 exec 的完整参数序列，任何新增参数都必须先更新这里。
+    expected_exec_args = {
+        "run-agent/action.yml": [
+            '--cd "$CONSUMER_WORKSPACE"', "--skip-git-repo-check", "--ephemeral",
+            "--dangerously-bypass-approvals-and-sandbox", '--output-schema "$SCHEMA_FILE"',
+            '--output-last-message "$RESULT_FILE"', '- < "$PROMPT_FILE"',
+        ],
+        "pr-review.yml": [
+            '--cd "$SAFE_ROOT"', '--add-dir "$GITHUB_WORKSPACE"', "--skip-git-repo-check", "--ephemeral",
+            "--ignore-rules", "--dangerously-bypass-approvals-and-sandbox",
+            '--output-schema "$RUNNER_TEMP/review-schema.json"', '--output-last-message "$LAST_MSG"',
+            '- < "$RUNNER_TEMP/review-prompt.txt"',
+        ],
+    }
+    for name, text in (("run-agent/action.yml", action), ("pr-review.yml", pr_review)):
+        invocations = re.findall(r'^\s*"\$(?:codex_path|CODEX_PATH)" exec \\\n((?:.*\\\n)*.*)$', text, re.M)
+        assert len(invocations) == 1, (name, invocations)
+        args = [line.strip().removesuffix("\\").strip() for line in invocations[0].splitlines()]
+        assert args == expected_exec_args[name], (name, args)
 
     # 执行 publish-change.sh 真实的前两段校验，而不是只做文本检查：白名单若与 workflow
     # 传入的模型不一致，Agent 与 validator 都会成功，直到发布阶段才被拒。
