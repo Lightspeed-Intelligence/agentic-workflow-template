@@ -39,9 +39,9 @@ runs:
         set -euo pipefail
         case "$PROVIDER" in
           codex)
-            install_dir="$RUNNER_TEMP/codex-0.156.1"
+            install_dir="$RUNNER_TEMP/codex-0.159.3"
             npm install --ignore-scripts --no-audit --no-fund \
-              --prefix "$install_dir" @openai/codex@0.156.1
+              --prefix "$install_dir" @openai/codex@0.159.3
             codex_path="$install_dir/node_modules/.bin/codex"
             "$codex_path" --version
             ;;
@@ -80,7 +80,7 @@ runs:
 
         case "$PROVIDER" in
           codex)
-            codex_path="$RUNNER_TEMP/codex-0.156.1/node_modules/.bin/codex"
+            codex_path="$RUNNER_TEMP/codex-0.159.3/node_modules/.bin/codex"
             test -x "$codex_path"
             export OPENAI_API_KEY="$API_KEY"
             export CODEX_HOME="$RUNNER_TEMP/codex-home"
