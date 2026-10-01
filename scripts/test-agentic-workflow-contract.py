@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 import tempfile
+import tomllib
 from pathlib import Path
 
 
@@ -573,8 +574,8 @@ def test_setup_hook_wiring() -> None:
     assert "-eq 124" in hook, "必须识别 GNU timeout 的超时退出码"
 
 
-def extract_dedented(text: str, start: str, end: str) -> str:
-    begin = text.index(start)
+def extract_dedented(text: str, start: str, end: str, offset: int = 0) -> str:
+    begin = text.index(start, offset)
     block = text[begin:text.index(end, begin)]
     lines = block.splitlines()
     indent = min(len(line) - len(line.lstrip()) for line in lines if line.strip())
@@ -648,19 +649,47 @@ def test_model_ids_are_consistent() -> None:
     assert len(codex_models) == 1 and len(claude_models) == 1, (codex_models, claude_models)
     codex_model, claude_model = codex_models.pop(), claude_models.pop()
     for name, text in sources.items():
-        for found in re.findall(r"gpt-[0-9][0-9A-Za-z.-]*", text):
-            assert found == codex_model, (name, found, codex_model)
-        for found in re.findall(r"claude-(?:opus|sonnet|haiku)-[0-9A-Za-z.-]*", text):
-            assert found == claude_model, (name, found, claude_model)
+        # 不区分大小写：页脚与 step 名用 GPT-6.1-sol 这种展示写法，同样必须指向唯一的模型。
+        for found in re.findall(r"gpt-[0-9][0-9A-Za-z.-]*", text, re.I):
+            assert found.lower() == codex_model, (name, found, codex_model)
+        for found in re.findall(r"claude-(?:opus|sonnet|haiku)-[0-9A-Za-z.-]*", text, re.I):
+            assert found.lower() == claude_model, (name, found, claude_model)
+    # 白名单若混入不像 gpt-/claude- 的 ID（例如 o5-sol），上面的扫描看不到它，
+    # 所以对每个 IN(...) 模型列表做集合相等断言。
+    for name in ("publish-change.sh", "validate-change-artifact.sh"):
+        lists = re.findall(r"\(\.model \| IN\(([^)]*)\)\)", sources[name])
+        assert lists, name
+        for listed in lists:
+            assert set(re.findall(r'"([^"]+)"', listed)) == {codex_model, claude_model}, (name, listed)
+        pairs = re.findall(r'\.reviewer == "(\w+)" and \.model == "([^"]+)"', sources[name])
+        assert all(pair in {("codex", codex_model), ("claude", claude_model)} for pair in pairs), (name, pairs)
     assert f'model = "{codex_model}"' in pr_review
     assert f"--model {claude_model}" in pr_review
 
     # 未显式设置时推理强度跟随模型目录的默认值，换模型会悄悄改变它（gpt-6.1-sol 默认 low）。
-    # 两处 Codex config 都必须显式锁定，且取值一致。
+    # 只匹配这一行不够：键若落进 [model_providers.gateway] 表，Codex 只打印一条 warning 就忽略它。
+    # 所以把 heredoc 交给 bash 渲染出实际的 config.toml，再按 TOML 语义断言它位于顶层。
     action = sources["run-agent/action.yml"]
     for name, text in (("run-agent/action.yml", action), ("pr-review.yml", pr_review)):
-        efforts = re.findall(r'^\s*model_reasoning_effort = "([a-z]+)"$', text, re.M)
-        assert efforts == ["medium"], (name, efforts)
+        start = text.index('cat > "$CODEX_HOME/config.toml" <<EOF\n')
+        body_start = start + len('cat > "$CODEX_HOME/config.toml" <<EOF\n')
+        body = text[body_start:text.index("EOF\n", body_start)]
+        lines = body.splitlines()
+        indent = min(len(line) - len(line.lstrip()) for line in lines if line.strip())
+        heredoc = "\n".join(line[indent:] for line in lines) + "\n"
+        rendered = run(
+            ["bash", "-c", 'cat <<EOF\n' + heredoc + 'EOF\n'],
+            env={"PATH": "/usr/bin:/bin", "MODEL": codex_model, "endpoint": "https://gateway.invalid/v1",
+                 "BASE_URL": "https://gateway.invalid"},
+        ).stdout
+        config = tomllib.loads(rendered)
+        assert config.get("model_reasoning_effort") == "medium", (name, config)
+        assert config.get("model") == codex_model, (name, config)
+        for table, values in config.items():
+            if isinstance(values, dict):
+                for nested in values.values():
+                    assert not (isinstance(nested, dict) and "model_reasoning_effort" in nested), (name, table)
+                assert "model_reasoning_effort" not in values, (name, table)
 
     # 执行 publish-change.sh 真实的前两段校验，而不是只做文本检查：白名单若与 workflow
     # 传入的模型不一致，Agent 与 validator 都会成功，直到发布阶段才被拒。
