@@ -81,7 +81,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: ff7c5ab8540124d1a8bc7e614e70a21eef606446
+          ref: ba6f9fc04803a5bafdce9b52d741043508e66d0d
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review
@@ -375,7 +375,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: ff7c5ab8540124d1a8bc7e614e70a21eef606446
+          ref: ba6f9fc04803a5bafdce9b52d741043508e66d0d
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review
@@ -531,6 +531,7 @@ jobs:
           cat > "$CODEX_HOME/config.toml" <<EOF
           model = "gpt-6.1-sol"
           model_provider = "gateway"
+          model_reasoning_effort = "medium"
           service_tier = "priority"
 
           [model_providers.gateway]

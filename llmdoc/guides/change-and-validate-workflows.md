@@ -149,6 +149,9 @@ repeatedly clicking **Re-run jobs** cannot validate the newly merged workflow.
   `publish-change.sh` and `validate-change-artifact.sh`, so a partial rename passes the Agent job and
   fails only at publication; `pr-review.yml` installs its CLIs inline, apart from `run-agent`. Update
   every site in one runtime release and let both contract harnesses assert that no old ID remains.
+- Leaving Codex reasoning effort to the model default. Each model in the CLI's built-in catalog has its
+  own `default_reasoning_level` (`gpt-6-sol` medium, `gpt-6.1-sol` low), so a model swap silently changes
+  effort. Set `model_reasoning_effort` explicitly in every Codex `config.toml` and assert it.
 - Locating a step position with `str.index` over a whole workflow file when Codex and Claude jobs share
   step names: the search always returns the primary job's match and the fallback is never checked.
 - Deriving one operand of an ordering assertion from the other, such as

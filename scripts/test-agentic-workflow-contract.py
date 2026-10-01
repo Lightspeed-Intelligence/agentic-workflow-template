@@ -630,6 +630,60 @@ def test_claude_failure_diagnostics() -> None:
                 assert fragment in lines[0], (name, case, fragment, lines[0])
 
 
+def test_model_ids_are_consistent() -> None:
+    # 模型 ID 同时写在 workflow 输入、normalize/package 参数、发布端白名单和两个运行时脚本里。
+    # 只封一个具体的旧字面量挡不住下一次换模型时漏改一处，所以从 workflow 的 run-agent 输入推出
+    # 唯一的 Codex/Claude 模型，再要求每个来源里出现的模型 ID 都与之相等。
+    pr_review = (ROOT / ".github/workflows/pr-review.yml").read_text()
+    sources = {
+        **{path.name: path.read_text() for path in WORKFLOWS.values()},
+        "pr-review.yml": pr_review,
+        **{path.name: path.read_text() for path in sorted(SCRIPTS.glob("*.sh"))},
+        "run-agent/action.yml": ACTION.read_text(),
+    }
+    codex_models = set(re.findall(r"^          model: (gpt-\S+)$", "".join(
+        sources[path.name] for path in WORKFLOWS.values()), re.M))
+    claude_models = set(re.findall(r"^          model: (claude-\S+)$", "".join(
+        sources[path.name] for path in WORKFLOWS.values()), re.M))
+    assert len(codex_models) == 1 and len(claude_models) == 1, (codex_models, claude_models)
+    codex_model, claude_model = codex_models.pop(), claude_models.pop()
+    for name, text in sources.items():
+        for found in re.findall(r"gpt-[0-9][0-9A-Za-z.-]*", text):
+            assert found == codex_model, (name, found, codex_model)
+        for found in re.findall(r"claude-(?:opus|sonnet|haiku)-[0-9A-Za-z.-]*", text):
+            assert found == claude_model, (name, found, claude_model)
+    assert f'model = "{codex_model}"' in pr_review
+    assert f"--model {claude_model}" in pr_review
+
+    # 未显式设置时推理强度跟随模型目录的默认值，换模型会悄悄改变它（gpt-6.1-sol 默认 low）。
+    # 两处 Codex config 都必须显式锁定，且取值一致。
+    action = sources["run-agent/action.yml"]
+    for name, text in (("run-agent/action.yml", action), ("pr-review.yml", pr_review)):
+        efforts = re.findall(r'^\s*model_reasoning_effort = "([a-z]+)"$', text, re.M)
+        assert efforts == ["medium"], (name, efforts)
+
+    # 执行 publish-change.sh 真实的前两段校验，而不是只做文本检查：白名单若与 workflow
+    # 传入的模型不一致，Agent 与 validator 都会成功，直到发布阶段才被拒。
+    publisher = (SCRIPTS / "publish-change.sh").read_text()
+    gate = publisher[publisher.index("jq -e '"):publisher.index("outcome=$(jq -r '.outcome' \"$manifest\")")]
+    with tempfile.TemporaryDirectory(prefix="agentic-publish-gate-") as tmp_name:
+        root = Path(tmp_name)
+        manifest, result = root / "manifest.json", root / "result.json"
+        script = f'set -euo pipefail\nmanifest="{manifest}"\nresult="{result}"\n{gate}'
+        base = {"version": 1, "outcome": "READY", "base_sha": "0" * 40}
+        for reviewer, model, accepted in (
+            ("codex", codex_model, True),
+            ("claude", claude_model, True),
+            ("codex", claude_model, False),
+            ("claude", codex_model, False),
+            ("codex", "gpt-0-unknown", False),
+        ):
+            manifest.write_text(json.dumps(base | {"reviewer": reviewer, "model": model}))
+            result.write_text(json.dumps(change_result() | {"reviewer": reviewer, "model": model}))
+            outcome = run(["bash", "-c", script], check=False)
+            assert (outcome.returncode == 0) == accepted, (reviewer, model, outcome.stderr)
+
+
 def test_runtime_is_immutable() -> None:
     all_refs: set[str] = set()
     for path in WORKFLOWS.values():
@@ -676,6 +730,7 @@ def main() -> None:
     test_closes_is_publisher_owned()
     test_setup_hook_wiring()
     test_claude_failure_diagnostics()
+    test_model_ids_are_consistent()
     test_runtime_is_immutable()
     print("agentic workflow contract fixtures passed")
 

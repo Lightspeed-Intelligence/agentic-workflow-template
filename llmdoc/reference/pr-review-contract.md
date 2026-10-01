@@ -3,7 +3,7 @@
 ## Fixed Runtime
 
 - Primary: `@anthropic-ai/claude-code@2.1.282` package wrapper, model `claude-opus-5-5`.
-- Fallback: `@openai/codex@0.159.3`, model `gpt-6.1-sol`.
+- Fallback: `@openai/codex@0.159.3`, model `gpt-6.1-sol`, explicit `model_reasoning_effort = "medium"`.
 - `pr-review.yml` installs both CLIs inline instead of through `run-agent`; its versions must equal
   `.github/actions/run-agent/action.yml`, which `scripts/test-agentic-workflow-contract.py` asserts.
 - Reviewer timeouts: 45 minutes each; publisher runs only after reviewer jobs settle.
