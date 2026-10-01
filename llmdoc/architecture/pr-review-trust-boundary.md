@@ -11,7 +11,7 @@ pull_request event
   -> deterministic preparation: authenticate structured Bot history, select full/incremental range
   -> optional base-pinned setup_script: self-bounded 13m, non-fatal, disclosed in the prompt
   -> claude_review: read-only token, full local execution, claude-opus-5-5
-  -> on process/schema/soft failure: independent codex_review, read-only token, gpt-6-sol
+  -> on process/schema/soft failure: independent codex_review, read-only token, gpt-6.1-sol
   -> one-day structured artifact
   -> publish: deterministic validation, pull-requests: write, gh pr comment
   -> optional Feishu notification

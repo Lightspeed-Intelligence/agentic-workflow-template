@@ -116,8 +116,9 @@ def test_provider_and_permission_boundaries() -> None:
         assert text.count("base_url: ${{ secrets.OPENAI_BASE_URL || secrets.ANTHROPIC_BASE_URL }}") == 1
         assert text.count("api_key: ${{ secrets.ANTHROPIC_API_KEY }}") == 1
         assert text.count("model: claude-opus-5-5") == 1
-        assert text.count("model: gpt-6-sol") == 1
+        assert text.count("model: gpt-6.1-sol") == 1
         assert "gpt-5.6-sol" not in text
+        assert "gpt-6-sol" not in text
         assert not re.search(r"claude-opus-5(?![-.\w])", text)
         assert "fable-5" not in text.lower()
         assert "github_token:" not in text
@@ -226,7 +227,7 @@ def test_answer_normalizers() -> None:
             output = root / "output.json"
             source.write_text(json.dumps(value))
             return run([
-                str(normalizer), str(source), str(output), "codex", "gpt-6-sol", mode,
+                str(normalizer), str(source), str(output), "codex", "gpt-6.1-sol", mode,
             ], check=False).returncode == 0
 
         common = {
@@ -298,7 +299,7 @@ def test_change_artifact_scripts() -> None:
         artifact = root / "artifact"
         run([
             str(package), str(raw), str(repo), str(artifact), base,
-            "codex", "gpt-6-sol", "implement",
+            "codex", "gpt-6.1-sol", "implement",
         ])
         git(repo, "reset", "-q", "--hard", base)
         env = os.environ.copy()
@@ -329,7 +330,7 @@ def test_change_artifact_scripts() -> None:
         assert run([
             str(package), str(dirty_no_change_raw), str(dirty_no_change_repo),
             str(root / "dirty-no-change-artifact"), dirty_no_change_base,
-            "codex", "gpt-6-sol", "implement",
+            "codex", "gpt-6.1-sol", "implement",
         ], check=False).returncode != 0
 
         git(dirty_no_change_repo, "reset", "-q", "--hard", dirty_no_change_base)
@@ -337,7 +338,7 @@ def test_change_artifact_scripts() -> None:
         assert run([
             str(package), str(dirty_no_change_raw), str(dirty_no_change_repo),
             str(root / "untracked-no-change-artifact"), dirty_no_change_base,
-            "codex", "gpt-6-sol", "implement",
+            "codex", "gpt-6.1-sol", "implement",
         ], check=False).returncode != 0
 
         docs_repo = root / "docs-repo"
@@ -347,7 +348,7 @@ def test_change_artifact_scripts() -> None:
         docs_raw.write_text(json.dumps(change_result()))
         rejected = run([
             str(package), str(docs_raw), str(docs_repo), str(root / "docs-artifact"),
-            docs_base, "codex", "gpt-6-sol", "update-llmdoc",
+            docs_base, "codex", "gpt-6.1-sol", "update-llmdoc",
         ], check=False)
         assert rejected.returncode != 0
 
@@ -364,7 +365,7 @@ def test_change_artifact_scripts() -> None:
         add_artifact = root / "gitlink-add-artifact"
         run([
             str(package), str(add_raw), str(add_repo), str(add_artifact), add_base,
-            "codex", "gpt-6-sol", "implement",
+            "codex", "gpt-6.1-sol", "implement",
         ])
         assert json.loads((add_artifact / "manifest.json").read_text())["outcome"] == "BLOCKED"
         assert not (add_artifact / "candidate.bundle").exists()
@@ -387,7 +388,7 @@ def test_change_artifact_scripts() -> None:
         assert run([
             str(package), str(dirty_submodule_no_change), str(gitlink_repo),
             str(root / "dirty-submodule-no-change-artifact"), gitlink_base,
-            "codex", "gpt-6-sol", "implement",
+            "codex", "gpt-6.1-sol", "implement",
         ], check=False).returncode != 0
 
         (gitlink_repo / "file.txt").write_text("base\ntop-level\n")
@@ -396,7 +397,7 @@ def test_change_artifact_scripts() -> None:
         dirty_artifact = root / "gitlink-dirty-artifact"
         run([
             str(package), str(dirty_raw), str(gitlink_repo), str(dirty_artifact), gitlink_base,
-            "codex", "gpt-6-sol", "implement",
+            "codex", "gpt-6.1-sol", "implement",
         ])
         assert json.loads((dirty_artifact / "manifest.json").read_text())["outcome"] == "BLOCKED"
         assert not (dirty_artifact / "candidate.bundle").exists()
@@ -410,7 +411,7 @@ def test_change_artifact_scripts() -> None:
         modify_artifact = root / "gitlink-modify-artifact"
         run([
             str(package), str(modify_raw), str(gitlink_repo), str(modify_artifact), gitlink_base,
-            "codex", "gpt-6-sol", "implement",
+            "codex", "gpt-6.1-sol", "implement",
         ])
         assert json.loads((modify_artifact / "manifest.json").read_text())["outcome"] == "BLOCKED"
 
@@ -421,7 +422,7 @@ def test_change_artifact_scripts() -> None:
         delete_artifact = root / "gitlink-delete-artifact"
         run([
             str(package), str(delete_raw), str(gitlink_repo), str(delete_artifact), gitlink_base,
-            "codex", "gpt-6-sol", "implement",
+            "codex", "gpt-6.1-sol", "implement",
         ])
         assert json.loads((delete_artifact / "manifest.json").read_text())["outcome"] == "BLOCKED"
 
@@ -439,7 +440,7 @@ def test_change_artifact_scripts() -> None:
         bundle_sha = hashlib.sha256((bypass / "candidate.bundle").read_bytes()).hexdigest()
         changed_files = git(gitlink_repo, "diff", "--name-only", f"{gitlink_base}..{delete_candidate}").splitlines()
         bypass_result = change_result()
-        bypass_result.update({"reviewer": "codex", "model": "gpt-6-sol"})
+        bypass_result.update({"reviewer": "codex", "model": "gpt-6.1-sol"})
         (bypass / "result.json").write_text(json.dumps(bypass_result))
         (bypass / "manifest.json").write_text(json.dumps({
             "version": 1,
@@ -449,7 +450,7 @@ def test_change_artifact_scripts() -> None:
             "bundle_sha256": bundle_sha,
             "changed_files": changed_files,
             "reviewer": "codex",
-            "model": "gpt-6-sol",
+            "model": "gpt-6.1-sol",
         }))
         git(gitlink_repo, "reset", "-q", "--hard", gitlink_base)
         validator_rejected = run([

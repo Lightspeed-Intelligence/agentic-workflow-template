@@ -23,7 +23,7 @@ copying Agent logic.
    come from an immutable template commit; consumers do not distribute template policy.
 4. After task inputs are frozen, an optional consumer-declared `setup_script` may prepare language
    runtimes and dependencies. Claude Code with `claude-opus-5-5` runs first without GitHub write
-   credentials. Process, schema or structured soft failure starts Codex with `gpt-6-sol` from the same
+   credentials. Process, schema or structured soft failure starts Codex with `gpt-6.1-sol` from the same
    fixed input in a fresh runner.
 5. Pure-answer workflows transfer validated JSON. Code-writing workflows transfer a single-parent Git
    bundle which a separate read-only job validates before publication.

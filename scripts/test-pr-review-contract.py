@@ -84,7 +84,7 @@ def state(head: str, *, critical: int = 0, important: int = 0, suggestion: int =
         "important_count": important,
         "suggestion_count": suggestion,
         "reviewer": "codex",
-        "model": "gpt-6-sol",
+        "model": "gpt-6.1-sol",
     }
 
 
@@ -217,7 +217,7 @@ def test_publisher_gate(workflow: str) -> None:
         "suggestion_count": 0,
         "comment_body": "## review",
         "reviewer": "codex",
-        "model": "gpt-6-sol",
+        "model": "gpt-6.1-sol",
     }
     assert jq_accepts(program, valid)
 
@@ -238,6 +238,7 @@ def test_publisher_gate(workflow: str) -> None:
         valid | {"comment_body": ""},
         valid | {"model": "claude-opus-5-5"},
         valid | {"model": "gpt-5.6-sol"},
+        valid | {"model": "gpt-6-sol"},
         request_changes | {"model": "claude-opus-5"},
     ]
     for value in invalid_values:
@@ -650,15 +651,16 @@ def test_model_secret_routing(workflow: str, caller: str) -> None:
 
 def test_model_names(workflow: str, readme: str, question_workflow: str) -> None:
     assert workflow.count("--model claude-opus-5-5") == 1
-    assert workflow.count('model = "gpt-6-sol"') == 1
+    assert workflow.count('model = "gpt-6.1-sol"') == 1
     assert "claude-opus-4-8" not in workflow
     assert "gpt-5.6-sol" not in workflow
+    assert "gpt-6-sol" not in workflow
     assert not re.search(r"claude-opus-5(?![-.\w])", workflow)
 
     pr_example = re.search(r"// pr-review\n\{.*?\n\}", readme, re.DOTALL)
     question_example = re.search(r"// question\n\{.*?\n\}", readme, re.DOTALL)
-    assert pr_example and '"model": "claude-opus-5-5 | gpt-6-sol"' in pr_example.group(0)
-    assert question_example and '"model": "claude-opus-5-5 | gpt-6-sol"' in question_example.group(0)
+    assert pr_example and '"model": "claude-opus-5-5 | gpt-6.1-sol"' in pr_example.group(0)
+    assert question_example and '"model": "claude-opus-5-5 | gpt-6.1-sol"' in question_example.group(0)
     assert "model: claude-opus-5-5" in question_workflow
 
 

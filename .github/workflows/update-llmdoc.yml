@@ -115,7 +115,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 241cdeef537c4695207f4aa13e557a554c21bc3d
+          ref: ff7c5ab8540124d1a8bc7e614e70a21eef606446
           path: runtime
           sparse-checkout: |
             .github/actions/run-agent
@@ -231,7 +231,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 241cdeef537c4695207f4aa13e557a554c21bc3d
+          ref: ff7c5ab8540124d1a8bc7e614e70a21eef606446
           path: runtime
           sparse-checkout: .github/scripts/agentic
           sparse-checkout-cone-mode: false
@@ -281,7 +281,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 241cdeef537c4695207f4aa13e557a554c21bc3d
+          ref: ff7c5ab8540124d1a8bc7e614e70a21eef606446
           path: runtime
           sparse-checkout: |
             .github/actions/run-agent
@@ -343,7 +343,7 @@ jobs:
         uses: ./runtime/.github/actions/run-agent
         with:
           provider: codex
-          model: gpt-6-sol
+          model: gpt-6.1-sol
           api_key: ${{ secrets.OPENAI_API_KEY || secrets.ANTHROPIC_API_KEY }}
           base_url: ${{ secrets.OPENAI_BASE_URL || secrets.ANTHROPIC_BASE_URL }}
           workspace: ${{ github.workspace }}/consumer
@@ -356,7 +356,7 @@ jobs:
           bash runtime/.github/scripts/agentic/package-change-result.sh \
             "$RUNNER_TEMP/raw-result.json" "$GITHUB_WORKSPACE/consumer" \
             "$RUNNER_TEMP/candidate" "${{ needs.prepare.outputs.base_sha }}" \
-            codex gpt-6-sol update-llmdoc
+            codex gpt-6.1-sol update-llmdoc
 
       - name: Upload Codex candidate
         uses: actions/upload-artifact@v4
@@ -395,7 +395,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 241cdeef537c4695207f4aa13e557a554c21bc3d
+          ref: ff7c5ab8540124d1a8bc7e614e70a21eef606446
           path: runtime
           sparse-checkout: .github/scripts/agentic
           sparse-checkout-cone-mode: false
@@ -454,7 +454,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 241cdeef537c4695207f4aa13e557a554c21bc3d
+          ref: ff7c5ab8540124d1a8bc7e614e70a21eef606446
           path: runtime
           sparse-checkout: .github/scripts/agentic/publish-change.sh
           sparse-checkout-cone-mode: false
@@ -504,7 +504,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 241cdeef537c4695207f4aa13e557a554c21bc3d
+          ref: ff7c5ab8540124d1a8bc7e614e70a21eef606446
           path: runtime
           sparse-checkout: .github/actions/feishu-notify
           sparse-checkout-cone-mode: false

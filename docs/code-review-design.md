@@ -129,7 +129,7 @@ flowchart TD
     B["Step 2: 准备可信输入<br/>template 固定 commit 的单文件审查 Skill<br/>consumer base 的历史准备脚本<br/>选择 full / incremental diff"]
     C["Step 3: Claude Code + Claude Opus 5.5<br/>完整本地执行权限"]
     D{"Claude Code 进程、结构校验<br/>且无软失败信号?"}
-    E["Step 4: 独立 runner<br/>Codex + GPT-6-sol fallback"]
+    E["Step 4: 独立 runner<br/>Codex + GPT-6.1-sol fallback"]
     F["Step 5: 上传结构化结果 artifact"]
     G["Step 6: 独立发布 Job<br/>校验 JSON 后代发 PR 评论"]
     H["Step 7: Step Summary + 飞书通知"]

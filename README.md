@@ -229,7 +229,7 @@ pr-review:
   这是有意为之：validator 的职责是在未经审查的候选提交上把关，不宜在其中准备环境。
 
 四个 Issue/文档 workflow 与 PR 审查都优先使用 Claude Code + `claude-opus-5-5`。进程失败、schema
-失败或结构化失败状态会在全新 runner 中启动 Codex + `gpt-6-sol` fallback。
+失败或结构化失败状态会在全新 runner 中启动 Codex + `gpt-6.1-sol` fallback。
 有效的 `BLOCKED` / `NO_CHANGES` 是业务结果，不触发 fallback。
 
 纯回答 workflow 只跨 job 传递 JSON artifact；写代码 workflow 传递单父提交 Git bundle，
@@ -346,7 +346,7 @@ Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有
   "important_count": 1,
   "suggestion_count": 2,
   "reviewer": "claude | codex",
-  "model": "claude-opus-5-5 | gpt-6-sol"
+  "model": "claude-opus-5-5 | gpt-6.1-sol"
 }
 
 // question
@@ -354,7 +354,7 @@ Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有
   "description": "回答内容摘要",
   "result_status": "COMPLETE",
   "reviewer": "claude | codex",
-  "model": "claude-opus-5-5 | gpt-6-sol"
+  "model": "claude-opus-5-5 | gpt-6.1-sol"
 }
 ```
 
