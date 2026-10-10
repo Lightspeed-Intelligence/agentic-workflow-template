@@ -37,7 +37,7 @@ diff 中出现 Redis 客户端调用、key 定义或 Lua 脚本时，追加检�
 
 ### 集群与原子性
 
-- **跨 slot**（BLOCKER）：集群模式下，一条多 key 命令、一个事务（MULTI/EXEC、WATCH）或一个 Lua 脚本涉及的所有 key 必须落在同一 slot，否则整条报 CROSSSLOT 失败。普通（非事务）pipeline 在代理模式下不受此限。新增配套 key 需要和已有 key 同 slot 时，应把已有 key 的完整名字作为 hash tag（`{原 key}:后缀`），而不是去改已有 key 的名字。
+- **跨 slot**（BLOCKER）：集群模式下，一条多 key 命令、一个事务（MULTI/EXEC、WATCH）或一个 Lua 脚本涉及的所有 key 必须落在同一 slot，否则整条报 CROSSSLOT 失败。普通（非事务）pipeline 在代理模式下不受此限。新增配套 key 需要和已有 key 同 slot 时，应把已有 key 的完整名字作为 hash tag（`{原 key}:后缀`），而不是去改已有 key 的名字；已有 key 本身带 hash tag 时直接沿用它的 tag（`user:{123}:profile` 配 `{123}:后缀`）——tag 取第一个 `{` 到其后第一个 `}`，再套一层会算出不同的 slot。
 - **非幂等写 + 重试**（BLOCKER）：INCR / HINCRBY / LPUSH 这类增量写，一旦有超时重试（业务层或客户端自动重试）就可能重复执行、重复计数。要求有去重手段（每次写入一个 token，记录在带 TTL、与数据 key 同 slot 的去重结构里），或者在代码里说明为什么重复可以接受。
 
 ### 大 key
