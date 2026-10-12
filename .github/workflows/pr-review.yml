@@ -7,6 +7,10 @@ name: PR Review (Reusable)
 on:
   workflow_call:
     inputs:
+      review_drafts:
+        description: "是否审查草稿 PR；调用方也必须允许草稿事件触发"
+        type: boolean
+        default: false
       use_feishu_notify:
         description: "是否发送飞书通知"
         type: boolean
@@ -44,7 +48,7 @@ jobs:
   # Git 凭据；Agent 步骤本身仅收到模型 API key，不收到 GitHub token 或 PAT。
   claude_review:
     name: Review with Claude Code (primary)
-    if: github.event.pull_request.draft == false
+    if: inputs.review_drafts || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -338,7 +342,7 @@ jobs:
   codex_review:
     name: Review with Codex (fallback)
     needs: claude_review
-    if: always() && github.event.pull_request.draft == false && needs.claude_review.result != 'success'
+    if: always() && (inputs.review_drafts || github.event.pull_request.draft == false) && needs.claude_review.result != 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -594,7 +598,7 @@ jobs:
   publish:
     name: review
     needs: [claude_review, codex_review]
-    if: always() && github.event.pull_request.draft == false
+    if: always() && (inputs.review_drafts || github.event.pull_request.draft == false)
     runs-on: ubuntu-latest
     permissions:
       contents: read

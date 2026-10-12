@@ -10,6 +10,9 @@
 
 ## Inputs and Secrets
 
+- `review_drafts` boolean, default `false`. Draft PRs skip primary, fallback and publication unless
+  the caller opts in with `true`; non-draft behavior is unchanged. The caller must also allow draft
+  `pull_request` events through its own trigger/job filters. This input does not widen branch filters.
 - `use_feishu_notify` boolean, default `true`.
 - `extra_allowed_tools` comma-separated Claude tool patterns; only normalized repository-relative
   `git -C` plus `diff`, `log`, `show`, `status`, `rev-parse`, `merge-base` or `ls-files`.

@@ -165,6 +165,7 @@ inputs:
 
 # pr-review.yml
 inputs:
+  review_drafts: false # 默认跳过草稿；设为 true 后草稿也可自动评审
   use_feishu_notify: true
   # 可选：Claude Code 主链路的仓库特定只读 Git 工具模式；不得放行 git -C <path>:*。
   extra_allowed_tools: 'Bash(git -C tipsy-app diff:*),Bash(git -C tipsy-app log:*)'
@@ -173,6 +174,10 @@ inputs:
 inputs:
   setup_script: .github/pr-review-setup.sh
 ```
+
+若要在草稿 PR 创建或更新时自动评审，调用方在 `with:` 中设置 `review_drafts: true`，
+并允许 `pull_request` 的 `opened`、`synchronize` 等事件触发，不得在调用 job 中过滤草稿。
+此开关只放行模板内部评审与发布，不改变调用方的分支或事件过滤条件。
 
 ### 环境准备脚本
 

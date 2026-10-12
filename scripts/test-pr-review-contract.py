@@ -202,6 +202,38 @@ def jq_accepts(program: str, value: dict[str, object]) -> bool:
         return run(["jq", "-e", program, handle.name], check=False).returncode == 0
 
 
+def test_draft_review_conditions(workflow: str) -> None:
+    input_match = re.search(r"^      review_drafts:\n(.*?)(?=^      \w+:|^    secrets:)",
+                            workflow, re.M | re.S)
+    assert input_match, "review_drafts opt-in input missing"
+    assert "        type: boolean\n" in input_match.group(1)
+    assert "        default: false\n" in input_match.group(1)
+
+    conditions = {}
+    for job in ("claude_review", "codex_review", "publish"):
+        match = re.search(r"^    if: (.+)$", job_block(workflow, job), re.M)
+        assert match, f"{job} condition missing"
+        conditions[job] = match.group(1)
+    for job in ("codex_review", "publish"):
+        assert "always()" in conditions[job], f"{job} must run after failed dependencies"
+
+    # Evaluate the actual workflow predicates over the caller's typed boolean input.
+    # A missing input receives the declared false default from workflow_call.
+    for draft in (False, True):
+        for review_drafts in (None, False, True):
+            enabled = review_drafts is True or not draft
+            for primary_result in ("success", "failure", "cancelled", "skipped"):
+                for job, condition in conditions.items():
+                    expression = condition.replace("inputs.review_drafts", repr(review_drafts is True))
+                    expression = expression.replace("github.event.pull_request.draft", repr(draft))
+                    expression = expression.replace("needs.claude_review.result", repr(primary_result))
+                    expression = expression.replace("always()", "True").replace("false", "False")
+                    expression = expression.replace("&&", " and ").replace("||", " or ")
+                    actual = eval(expression, {"__builtins__": {}}, {})
+                    expected = enabled and (job != "codex_review" or primary_result != "success")
+                    assert actual == expected, (job, draft, review_drafts, primary_result, condition)
+
+
 def test_publisher_gate(workflow: str) -> None:
     body = extract_step_run(workflow, "Validate and publish review comment")
     match = re.search(r"jq -e '\n(.*?)\n\s*' \"\$REVIEW_FILE\"", body, re.S)
@@ -840,6 +872,7 @@ def main() -> None:
     caller = CALLER.read_text()
     readme = README.read_text()
     question_workflow = QUESTION_WORKFLOW.read_text()
+    test_draft_review_conditions(workflow)
     run(["bash", "-n", str(PREPARE)])
     with tempfile.TemporaryDirectory(prefix="pr-review-repo-") as tmp_name:
         repo_info = make_repo(Path(tmp_name))

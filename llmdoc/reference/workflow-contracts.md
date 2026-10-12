@@ -7,7 +7,7 @@
 | `issue-dispatch.yml` | Issue opened | Agents contents read; `dispatch` issues write | Claude primary/Codex fallback analyzes only; authenticated publisher comments |
 | `implement.yml` | Issue comment matches implementation keyword | candidates/validators contents read; `implement` contents/issues/PR write | Agent produces a local commit bundle; validator gates deterministic push/PR/comment |
 | `question.yml` | Issue comment starts question keyword | Agents contents read; `answer` issues write | Claude primary/Codex fallback returns JSON; authenticated publisher comments |
-| `pr-review.yml` | Non-draft PR opened/synchronized/reopened | reviewers read-only; publisher PR write | Claude primary, isolated Codex fallback, artifact publication |
+| `pr-review.yml` | Caller-selected PR events; drafts require `review_drafts: true` (default false) | reviewers read-only; publisher PR write | Claude primary, isolated Codex fallback, artifact publication |
 | `update-llmdoc.yml` | External reusable caller only | candidates/validators contents read; `update` contents/PR write | Agent produces an llmdoc-only bundle; validator gates deterministic PR publication |
 
 ## Local Caller
