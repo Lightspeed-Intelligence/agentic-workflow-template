@@ -248,6 +248,15 @@ PR 审查规范由 reusable workflow 所在的 template 仓库以固定 commit �
 中；调用方 base checkout 只用于获取可选的历史审查准备脚本和环境准备脚本，
 缺失时分别安全降级为完整审查和不执行准备。
 
+`pr-review` 可选传入 `business_reference: .github/review/core-conversion.md`，从消费仓库的
+PR base commit 读取受版本控制的普通文件。两条审查链路使用同一份业务参考；新文件尚未
+进入 base 时会披露缺失，不从 PR head 补取。公开模板只维护通用审查方法，内部事件/入口/
+指标口径留在消费仓库。P0 先做全量影响筛查，再深查受影响场景全部事件；正常可达的条件性
+故障也需按证据报告，历史缺陷和合法策略调整不自动计问题。
+
+publisher 发出评论和通知后，`critical_count > 0` 会使稳定的 `pr-review / review` 检查
+失败；仅 MAJOR 仍为告警。该门禁不触发模型 fallback，调用方须在分支保护中要求此检查。
+
 五个 workflow 的审查规范、Skill、共享脚本、runner 与 publisher 都来自同一个模板
 commit。这个固定版本号是手工推进的，发布分两步：先提交运行时字节，再把所有 workflow
 的引用推进到该 commit。`scripts/test-agentic-workflow-contract.py` 与

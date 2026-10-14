@@ -198,6 +198,20 @@ Agent 有完整本地权限，但 runner 只预装通用工具链。需要特定
 
 ---
 
+## 业务参考与合并门禁
+
+`business_reference` 指向消费仓库内的业务核心链路清单，来自 PR base commit 的可信
+checkout，当前 PR 修改的清单不用于豁免自己。参考须是受版本控制的普通文件；默认空值
+不启用，旧 base 缺文件时披露限制并继续通用审查。Claude 与 Codex 使用相同参考内容。
+
+通用 Skill 规定全 P0 影响筛查、受影响场景全事件检查及功能/资金/归因/TTV 的分级。
+内部事件、入口和指标定义由消费仓库维护。正常可达的条件性故障有证据就报告；策略值
+变化、历史缺陷和未登记事项不机械升级为资金故障。
+
+publisher 在评论与通知后检查已验证的 critical_count：有 BLOCKER 时让稳定的 review
+job 失败，仅 MAJOR 保留告警。模型有效地发现问题不触发 fallback；只有模型执行/schema/
+软失败才走 fallback。调用方的分支保护需要将 pr-review / review 设为必需检查。
+
 ## 为什么只对少量小问题做增量
 
 增量审查可以减少重复工作，但不能让 Agent 自己从自由文本评论推断截止点。publisher

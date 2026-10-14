@@ -15,6 +15,7 @@ pull_request event
   -> one-day structured artifact
   -> publish: deterministic validation, pull-requests: write, gh pr comment
   -> optional Feishu notification
+  -> fail stable review check on validated BLOCKER findings
 ```
 
 ## Trust Classes
@@ -23,6 +24,8 @@ pull_request event
   complete single-file `pr-review/SKILL.md`, `github-comment/SKILL.md` and
   `.github/scripts/agentic/run-setup-hook.sh` into sanitized `.trusted-policy`. This revision is the
   same single runtime pin the four agentic workflows use.
+- Consumer business facts are optional `business_reference` files from the base checkout, appended
+  by a template-pinned helper before setup/Agent execution. No PR-head reference or symlink is read.
 - Consumer repositories do not need to copy template-owned reviewer policy files. Their exact base-SHA
   checkout in `.trusted-base` supplies only the optional history-preparation and environment-setup
   scripts.

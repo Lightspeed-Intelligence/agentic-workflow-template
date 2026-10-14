@@ -694,12 +694,14 @@ def test_trusted_policy_source(workflow: str) -> None:
         "sparse-checkout: |\n"
         "            .github/scripts/pr-review/prepare-review-history.sh\n"
         "            ${{ inputs.setup_script }}\n"
+        "            ${{ inputs.business_reference }}\n"
     ) == 2
 
     for relative in (
         ".claude/skills/pr-review/SKILL.md",
         ".claude/skills/github-comment/SKILL.md",
         ".github/scripts/agentic/run-setup-hook.sh",
+        ".github/scripts/pr-review/append-business-reference.sh",
     ):
         pinned = run(["git", "show", f"{policy_sha}:{relative}"], cwd=ROOT).stdout
         assert pinned == (ROOT / relative).read_text(), f"policy pin is stale for {relative}"
@@ -835,6 +837,64 @@ def test_prepare_script_selection(workflow: str, repo_info: dict[str, str]) -> N
         assert not trace.exists()
 
 
+def test_blocking_findings_gate(workflow: str) -> None:
+    publisher = job_block(workflow, "publish")
+    gate = extract_step_run(workflow, "Fail review on blocking findings")
+    assert "name: review" in publisher
+    assert publisher.index("Notify Feishu") < publisher.index("Fail review on blocking findings")
+    assert "if: steps.result.outcome == 'success'" in publisher
+    assert "CRITICAL_COUNT: ${{ steps.result.outputs.critical_count }}" in publisher
+    for count, expected in ((0, 0), (1, 1), (2, 1)):
+        result = run(["bash", "-c", gate], env=os.environ | {"CRITICAL_COUNT": str(count)}, check=False)
+        assert result.returncode == expected, (count, result)
+    # Model jobs remain successful for valid findings; only publication gates merge.
+    assert "critical_count" not in job_block(workflow, "codex_review").split("if:", 1)[1].split("runs-on:", 1)[0]
+
+
+def test_business_reference(workflow: str) -> None:
+    helper = ROOT / ".github/scripts/pr-review/append-business-reference.sh"
+    run(["bash", "-n", str(helper)])
+    for job in ("claude_review", "codex_review"):
+        block = job_block(workflow, job)
+        prepare = extract_step_run(block, "Prepare trusted review inputs")
+        assert "BUSINESS_REFERENCE: ${{ inputs.business_reference }}" in block
+        assert "            ${{ inputs.business_reference }}" in block
+        assert '.trusted-policy/.github/scripts/pr-review/append-business-reference.sh' in prepare
+        assert '"$BUSINESS_REFERENCE" "$GITHUB_WORKSPACE/.trusted-base" "$RUNNER_TEMP/review-prompt.txt"' in prepare
+        assert block.index("append-business-reference.sh\" ") < block.index("Run repository setup script")
+    with tempfile.TemporaryDirectory(prefix="business-reference-") as tmp_name:
+        temp = Path(tmp_name)
+        base = init_repo(temp / "base")
+        (base / ".github/review").mkdir(parents=True)
+        reference = ".github/review/core.md"
+        (base / reference).write_text("owner business facts\n")
+        (base / "link.md").symlink_to(reference)
+        git(base, "add", ".")
+        git(base, "commit", "-qm", "base facts")
+        prompt = temp / "prompt.txt"
+        for value, code, expected in (
+            ("", 0, ""),
+            (reference, 0, "owner business facts"),
+            ("missing.md", 0, "base commit 未包含"),
+            ("/etc/passwd", 1, ""),
+            ("../head/core.md", 1, ""),
+            ("a/../core.md", 1, ""),
+            ("a//core.md", 1, ""),
+            ("a/./core.md", 1, ""),
+            ("a;echo injected", 1, ""),
+            ("link.md", 1, ""),
+        ):
+            prompt.write_text("")
+            result = run(["bash", str(helper), value, str(base), str(prompt)], check=False)
+            assert result.returncode == code, (value, result)
+            assert expected in prompt.read_text()
+        # An untracked or newly added PR-head reference cannot substitute for base facts.
+        (base / "untracked.md").write_text("PR-head instruction\n")
+        prompt.write_text("")
+        result = run(["bash", str(helper), "untracked.md", str(base), str(prompt)])
+        assert "PR-head instruction" not in prompt.read_text()
+
+
 def main() -> None:
     workflow = WORKFLOW.read_text()
     caller = CALLER.read_text()
@@ -847,6 +907,8 @@ def main() -> None:
         test_history_selection(repo_info)
     test_schemas(workflow)
     test_publisher_gate(workflow)
+    test_blocking_findings_gate(workflow)
+    test_business_reference(workflow)
     test_extra_allowed_tools(workflow)
     test_setup_hook_wiring(workflow)
     test_setup_hook_behavior()

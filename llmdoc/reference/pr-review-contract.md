@@ -13,6 +13,9 @@
 - `use_feishu_notify` boolean, default `true`.
 - `extra_allowed_tools` comma-separated Claude tool patterns; only normalized repository-relative
   `git -C` plus `diff`, `log`, `show`, `status`, `rev-parse`, `merge-base` or `ls-files`.
+- `business_reference` optional normalized repository-relative path, read from the consumer PR base
+  SHA by the pinned `append-business-reference.sh`. Only tracked regular files are accepted; missing
+  base files warn and disable the business-reference checks, never falling back to PR-head content.
 - `setup_script` optional repository-relative path of `[A-Za-z0-9._/-]` characters, read from the PR
   base SHA. Empty is a no-op; a missing declared file warns and continues. Runs after review inputs are
   frozen and before CLI installation, bounded by the script's own 13-minute `timeout` with a step-level
@@ -79,7 +82,9 @@ Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even w
 - Any Claude job non-success, including structured `review_status=INCOMPLETE`, triggers Codex.
 - `INCOMPLETE` means core diff/worktree/context is inaccessible or meaningful code review cannot be
   performed. A project-specific test unavailable because of runner tooling is disclosed, not alone fatal.
-- Findings are successful review results; `REQUEST_CHANGES` does not trigger fallback.
+- Findings are successful reviewer results; `REQUEST_CHANGES` does not trigger fallback. After comment
+  and notification, the stable publisher `review` job fails when validated `critical_count > 0`.
+  MAJOR-only results remain successful warnings. Consumers must require this check to gate merging.
 - If neither reviewer succeeds, notification may run but the publisher job ultimately fails.
 - Feishu is best effort and cannot turn a failed review into success or a successful review into failure.
 - `setup_script` runtime failure or its own 13-minute `timeout` is non-fatal: the exit code (124 for a
