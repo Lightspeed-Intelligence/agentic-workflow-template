@@ -908,8 +908,9 @@ def main() -> None:
     test_schemas(workflow)
     test_publisher_gate(workflow)
     test_blocking_findings_gate(workflow)
-    assert "ready_for_review" in caller, "draft-to-ready PRs must trigger fresh review"
-    assert "ready_for_review" in readme, "caller example must cover draft-to-ready review"
+    ready_event = r"pull_request:\n\s+types: \[[^]\n]*\bready_for_review\b[^]\n]*\]"
+    assert re.search(ready_event, caller), "draft-to-ready PRs must trigger fresh review"
+    assert re.search(ready_event, readme), "caller example must cover draft-to-ready review"
     test_business_reference(workflow)
     test_extra_allowed_tools(workflow)
     test_setup_hook_wiring(workflow)
