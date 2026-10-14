@@ -844,7 +844,7 @@ def test_blocking_findings_gate(workflow: str) -> None:
     assert publisher.index("Notify Feishu") < publisher.index("Fail review on blocking findings")
     assert "if: steps.result.outcome == 'success'" in publisher
     assert "CRITICAL_COUNT: ${{ steps.result.outputs.critical_count }}" in publisher
-    for count, expected in ((0, 0), (1, 1), (2, 1)):
+    for count, expected in ((0, 0), (1, 1), (2, 1), ("1e+30", 1), ("0.0", 0)):
         result = run(["bash", "-c", gate], env=os.environ | {"CRITICAL_COUNT": str(count)}, check=False)
         assert result.returncode == expected, (count, result)
     # Model jobs remain successful for valid findings; only publication gates merge.

@@ -812,7 +812,7 @@ jobs:
         env:
           CRITICAL_COUNT: ${{ steps.result.outputs.critical_count }}
         run: |
-          if [ "$CRITICAL_COUNT" -gt 0 ]; then
+          if jq -en --argjson count "$CRITICAL_COUNT" '$count > 0' > /dev/null; then
             echo "::error::PR review found $CRITICAL_COUNT BLOCKER finding(s); fix before merge"
             exit 1
           fi
