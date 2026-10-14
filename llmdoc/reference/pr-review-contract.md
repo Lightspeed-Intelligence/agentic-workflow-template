@@ -84,7 +84,8 @@ Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even w
   performed. A project-specific test unavailable because of runner tooling is disclosed, not alone fatal.
 - Findings are successful reviewer results; `REQUEST_CHANGES` does not trigger fallback. After comment
   and notification, the stable publisher `review` job fails when validated `critical_count > 0`.
-  MAJOR-only results remain successful warnings. Consumers must require this check to gate merging.
+  MAJOR-only results remain successful warnings. Consumers must require this check and trigger
+  `ready_for_review` so draft-to-ready transitions get a fresh review.
 - If neither reviewer succeeds, notification may run but the publisher job ultimately fails.
 - Feishu is best effort and cannot turn a failed review into success or a successful review into failure.
 - `setup_script` runtime failure or its own 13-minute `timeout` is non-fatal: the exit code (124 for a

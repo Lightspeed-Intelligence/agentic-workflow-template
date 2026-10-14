@@ -47,7 +47,7 @@ on:
   issue_comment:
     types: [created]
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
   # Issue 创建时自动分析；不会自动修复
@@ -255,7 +255,8 @@ PR base commit 读取受版本控制的普通文件。两条审查链路使用�
 故障也需按证据报告，历史缺陷和合法策略调整不自动计问题。
 
 publisher 发出评论和通知后，`critical_count > 0` 会使稳定的 `pr-review / review` 检查
-失败；仅 MAJOR 仍为告警。该门禁不触发模型 fallback，调用方须在分支保护中要求此检查。
+失败；仅 MAJOR 仍为告警。该门禁不触发模型 fallback，调用方须在分支保护中要求此检查，
+并监听 `ready_for_review`，确保草稿转待审后重新执行审查。
 
 五个 workflow 的审查规范、Skill、共享脚本、runner 与 publisher 都来自同一个模板
 commit。这个固定版本号是手工推进的，发布分两步：先提交运行时字节，再把所有 workflow

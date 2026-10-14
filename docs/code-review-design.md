@@ -83,7 +83,7 @@ graph TB
 
 ```mermaid
 flowchart LR
-    GH["GitHub 事件"] --> PR["pull_request<br/>opened / synchronize / reopened"]
+    GH["GitHub 事件"] --> PR["pull_request<br/>opened / synchronize / reopened / ready_for_review"]
     GH --> IS["issues<br/>opened"]
     GH --> IC["issue_comment<br/>created"]
 
@@ -121,7 +121,7 @@ question:
 
 ## Code Review 的详细流程
 
-这是本文重点。当一个非 Draft 的 PR 被 opened / synchronize / reopened 时，审查流程启动：
+这是本文重点。当一个非 Draft 的 PR 被 opened / synchronize / reopened / ready_for_review 时，审查流程启动：
 
 ```mermaid
 flowchart TD
@@ -210,7 +210,8 @@ checkout，当前 PR 修改的清单不用于豁免自己。参考须是受版�
 
 publisher 在评论与通知后检查已验证的 critical_count：有 BLOCKER 时让稳定的 review
 job 失败，仅 MAJOR 保留告警。模型有效地发现问题不触发 fallback；只有模型执行/schema/
-软失败才走 fallback。调用方的分支保护需要将 pr-review / review 设为必需检查。
+软失败才走 fallback。调用方的分支保护需要将 pr-review / review 设为必需检查，并监听 ready_for_review，
+避免草稿转待审后只有旧的 skipped 结果。
 
 ## 为什么只对少量小问题做增量
 
@@ -457,7 +458,7 @@ flowchart TD
     end
 
     subgraph pr_event["PR 被创建或更新"]
-        pr_trigger["pull_request:<br/>opened / synchronize / reopened"]
+        pr_trigger["pull_request:<br/>opened / synchronize / reopened / ready_for_review"]
         pr_trigger --> review["🔍 pr-review<br/>自动审查代码质量"]
     end
 
