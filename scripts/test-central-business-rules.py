@@ -11,6 +11,8 @@ import re
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch, MagicMock
+import urllib.error
 
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / ".github/scripts/pr-review/central-business-rules.py"
@@ -33,6 +35,7 @@ class API:
         }
         self.text = "owner facts at frozen commit"
         self.private = True
+        self.full_name = SOURCE
         self.truncated = False
         self.mode = "100644"
 
@@ -42,9 +45,9 @@ class API:
     def __call__(self, path):
         self.calls.append(path)
         if path == "repos/" + SOURCE:
-            return {"private": self.private}
+            return {"private": self.private, "full_name": self.full_name}
         if path == "repos/" + SOURCE + "/commits/main":
-            return {"sha": COMMIT}
+            return COMMIT
         files = self.files()
         blobs = {hashlib.sha1(text.encode()).hexdigest(): text for text in files.values()}
         if path == "repos/" + SOURCE + "/git/trees/" + COMMIT + "?recursive=1":
@@ -108,7 +111,7 @@ class CentralRulesTests(unittest.TestCase):
                 self.resolve(failed_api)
 
     def test_public_rules_source_and_incomplete_tree_are_rejected(self):
-        for field, value in (("private", False), ("truncated", True), ("mode", "120000"), ("mode", "160000")):
+        for field, value in (("private", False), ("full_name", "other/private-rules"), ("truncated", True), ("mode", "120000"), ("mode", "160000")):
             api = API()
             setattr(api, field, value)
             with self.subTest(field=field, value=value), self.assertRaises(ValueError):
@@ -154,6 +157,45 @@ class CentralRulesTests(unittest.TestCase):
             body = result.stdout + result.stderr + "".join(path.read_text() for path in Path(directory).iterdir())
             self.assertNotIn(env["GH_TOKEN"], body)
             self.assertIn("disabled", (Path(directory) / "provenance.md").read_text())
+
+    def test_transport_sha_media_type_and_redirect_protection(self):
+        response = MagicMock()
+        response.read.return_value = (COMMIT + "\n").encode()
+        opener = MagicMock()
+        opener.open.return_value.__enter__.return_value = response
+        with patch.dict(os.environ, GH_TOKEN="not-for-output"), patch.object(rules.urllib.request, "build_opener", return_value=opener) as build:
+            self.assertEqual(rules.github_api("repos/example/private-rules/commits/main"), COMMIT)
+            request = opener.open.call_args.args[0]
+            self.assertEqual(request.get_header("Accept"), "application/vnd.github.sha")
+            self.assertIsInstance(build.call_args.args[0], rules.NoRedirect)
+            self.assertIsNone(build.call_args.args[0].redirect_request(request, None, 302, "moved", {}, "https://other.invalid"))
+
+    def test_transport_http_failures_and_timeouts_are_non_success(self):
+        for code in (301, 302, 401, 403, 404, 500):
+            opener = MagicMock()
+            opener.open.side_effect = urllib.error.HTTPError("https://api.github.com/", code, "error", {}, None)
+            with self.subTest(code=code), patch.dict(os.environ, GH_TOKEN="not-for-output"), patch.object(rules.urllib.request, "build_opener", return_value=opener):
+                with self.assertRaisesRegex(ValueError, "HTTP " + str(code)):
+                    rules.github_api("repos/example/private-rules")
+        opener.open.side_effect = TimeoutError("timeout")
+        with patch.dict(os.environ, GH_TOKEN="not-for-output"), patch.object(rules.urllib.request, "build_opener", return_value=opener):
+            with self.assertRaises(TimeoutError):
+                rules.github_api("repos/example/private-rules")
+
+    def test_cli_configuration_failure_writes_no_partial_artifact(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result = subprocess.run([
+                "python3", str(HELPER), "--source", "other/private-rules", "--consumer", CONSUMER,
+                "--private", "true", "--output-dir", directory,
+            ], text=True, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("consumer organization", result.stderr)
+            self.assertEqual(list(Path(directory).iterdir()), [])
+            args = ["loader", "--consumer", CONSUMER, "--private", "true", "--output-dir", directory]
+            with patch("sys.argv", args), patch.object(rules, "resolve", side_effect=TimeoutError()):
+                with self.assertRaisesRegex(SystemExit, "TimeoutError"):
+                    rules.main()
+            self.assertEqual(list(Path(directory).iterdir()), [])
 
     def test_both_reviewers_require_and_consume_the_same_preflight_artifact(self):
         text = (ROOT / ".github/workflows/pr-review.yml").read_text()

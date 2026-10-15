@@ -15,6 +15,11 @@ REPOSITORY = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, response, code, message, headers, new_url):
+        return None
+
+
 def unique_object(pairs):
     result = {}
     for key, value in pairs:
@@ -29,22 +34,25 @@ def decode_json(raw):
 
 
 def github_api(path):
+    sha_response = "/commits/" in path
     request = urllib.request.Request(
         "https://api.github.com/" + path,
         headers={
             "Authorization": "Bearer " + os.environ["GH_TOKEN"],
-            "Accept": "application/vnd.github+json",
+            "Accept": "application/vnd.github.sha" if sha_response else "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
         },
     )
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
+        with urllib.request.build_opener(NoRedirect()).open(request, timeout=30) as response:
             body = response.read(MAX_BYTES + 1)
     except urllib.error.HTTPError as error:
-        raise ValueError(f"central rules API returned HTTP {error.code}") from None
+        code = error.code
+        error.close()
+        raise ValueError(f"central rules API returned HTTP {code}") from None
     if len(body) > MAX_BYTES:
         raise ValueError("central rules API response is too large")
-    return decode_json(body)
+    return body.decode("ascii").strip() if sha_response else decode_json(body)
 
 
 def regular_path(value):
@@ -69,10 +77,13 @@ def resolve(source, ref, consumer, private, api=github_api):
     if not ref or len(ref) > 200 or any(ord(char) < 32 for char in ref):
         raise ValueError("invalid central rules ref")
     prefix = "repos/" + source
-    if api(prefix).get("private") is not True:
+    repository = api(prefix)
+    if repository.get("full_name", "").lower() != source.lower():
+        raise ValueError("central rules repository identity does not match configuration")
+    if repository.get("private") is not True:
         raise ValueError("central business rules repository must be private")
-    sha = api(prefix + "/commits/" + urllib.parse.quote(ref, safe="")).get("sha", "")
-    if not SHA.fullmatch(sha):
+    sha = api(prefix + "/commits/" + urllib.parse.quote(ref, safe=""))
+    if not isinstance(sha, str) or not SHA.fullmatch(sha):
         raise ValueError("central rules ref did not resolve to a full commit SHA")
     tree = api(prefix + "/git/trees/" + sha + "?recursive=1")
     if tree.get("truncated") is not False or not isinstance(tree.get("tree"), list):
@@ -143,9 +154,10 @@ def main():
     args = parser.parse_args()
     try:
         metadata, context = resolve(args.source, args.ref, args.consumer, args.private == "true")
-    except (ValueError, KeyError, TypeError, UnicodeError, urllib.error.URLError) as error:
+    except (ValueError, KeyError, TypeError, UnicodeError, TimeoutError, urllib.error.URLError) as error:
         # Do not echo API bodies, Authorization headers or business facts into logs.
-        raise SystemExit("central business rules could not be loaded: " + type(error).__name__) from None
+        detail = str(error) if type(error) is ValueError else type(error).__name__
+        raise SystemExit("central business rules could not be loaded: " + detail) from None
     target = Path(args.output_dir)
     target.mkdir(parents=True, exist_ok=True)
     (target / "context.md").write_text(context, encoding="utf-8")
