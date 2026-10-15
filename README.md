@@ -248,11 +248,18 @@ PR 审查规范由 reusable workflow 所在的 template 仓库以固定 commit �
 中；调用方 base checkout 只用于获取可选的历史审查准备脚本和环境准备脚本，
 缺失时分别安全降级为完整审查和不执行准备。
 
-`pr-review` 可选传入 `business_reference: .github/review/core-conversion.md`，从消费仓库的
-PR base commit 读取受版本控制的普通文件。两条审查链路使用同一份业务参考；新文件尚未
-进入 base 时会披露缺失，不从 PR head 补取。公开模板只维护通用审查方法，内部事件/入口/
-指标口径留在消费仓库。P0 先做全量影响筛查，再深查受影响场景全部事件；正常可达的条件性
-故障也需按证据报告，历史缺陷和合法策略调整不自动计问题。
+业务事实集中维护在一个私有规则仓库。组织配置 Actions 变量 `CR_RULES_REPOSITORY`，可选
+`CR_RULES_REF`（默认 `main`）；工作流用独立准备 job 将 ref 固定为完整 SHA，再按
+`repositories.json` 选取职责和共同清单。Claude/Codex 复用同一 artifact，启用中央事实的
+PR 每轮做完整 base...head 审查，不能沿用旧规则下的增量截止点。消费者不保存业务规则副本。
+已跟随 `@main`、转发可用 `PAT_TOKEN` 的调用方无需逐仓增补配置；固定旧版、没有传入凭据、
+独立审查或尚未接入的仓库仍需一次性接入。
+
+准备 job 只用 `PAT_TOKEN || github.token` 读取同组织私有规则，不将凭据交给模型。
+配置后权限/文件/格式错误会失败并阻止两条模型链路；未配置时在评论中明确披露仅执行通用审查。
+公开仓库不下载私有事实。来源 SHA 和加载状态由 publisher 写入评论，不能被模型改成已覆盖。
+组织变量只放仓库/ref，不放凭据。P0先做影响筛查，再查受影响场景全部事件；资金/功能回归与
+采集统计问题分开定级，CR通过不代表实际转化或TTV通过。
 
 publisher 发出评论和通知后，`critical_count > 0` 会使稳定的 `pr-review / review` 检查
 失败；仅 MAJOR 仍为告警。该门禁不触发模型 fallback，调用方须在分支保护中要求此检查，
@@ -266,7 +273,7 @@ commit。这个固定版本号是手工推进的，发布分两步：先提交�
 
 每次 Agent 启动前，确定性准备步骤会使用 job 的只读 token 读取最新一条由
 `github-actions` App 发布、且带有 publisher 生成的结构化状态标记的历史 review。
-Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有 BLOCKER/MAJOR、恰有
+Agent 不接收该 token，也不自行查询评论。未加载中央业务事实时，仅当前序 review 没有 BLOCKER/MAJOR、恰有
 1–3 个 MINOR/NIT，且历史 head 是当前 head 的祖先时，才审查 `cutoff..head` 增量并
 逐条验证旧问题；其它情况一律审查完整 `base...head`。
 

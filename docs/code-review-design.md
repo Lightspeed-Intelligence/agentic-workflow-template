@@ -200,12 +200,18 @@ Agent 有完整本地权限，但 runner 只预装通用工具链。需要特定
 
 ## 业务参考与合并门禁
 
-`business_reference` 指向消费仓库内的业务核心链路清单，来自 PR base commit 的可信
-checkout，当前 PR 修改的清单不用于豁免自己。参考须是受版本控制的普通文件；默认空值
-不启用，旧 base 缺文件时披露限制并继续通用审查。Claude 与 Codex 使用相同参考内容。
+业务事实和仓库职责集中在同组织的私有规则仓库，通过组织 Actions 变量
+`CR_RULES_REPOSITORY` / `CR_RULES_REF` 配置一次，不复制到每个消费仓库。独立准备 job
+只读取 JSON/Markdown，把 ref 固定为一个 SHA；Claude/Codex 和 publisher 使用同一快照。
+`repositories.json` 的 common 文件提供共同事实，repositories 提供职责/检查重点，excluded
+显式排除非在线项目；新仓库没有映射时读取共同事实并披露职责缺口。
+
+公开消费者不读取私有业务事实。未配置时明确记录仅执行通用审查；配置后缺权限、文件缺失、
+映射错误或不完整目录树均失败，不让 fallback 绕过业务上下文。启用中央业务事实时每轮完整审查
+PR，规则升级不会被旧增量 cutoff 跳过。来源仓库/SHA和加载状态由publisher追加到评论。
 
 通用 Skill 规定全 P0 影响筛查、受影响场景全事件检查及功能/资金/归因/TTV 的分级。
-内部事件、入口和指标定义由消费仓库维护。正常可达的条件性故障有证据就报告；策略值
+内部事件、入口和指标定义由中央私有规则仓库维护。正常可达的条件性故障有证据就报告；策略值
 变化、历史缺陷和未登记事项不机械升级为资金故障。
 
 publisher 在评论与通知后检查已验证的 critical_count：有 BLOCKER 时让稳定的 review

@@ -667,9 +667,9 @@ def test_model_names(workflow: str, readme: str, question_workflow: str) -> None
 def test_checkout_credentials(workflow: str, caller: str) -> None:
     checkout_token = 'token: ${{ secrets.PAT_TOKEN || github.token }}'
     assert workflow.count(checkout_token) == 2
-    assert workflow.count('token: ${{ github.token }}') == 4
-    assert workflow.count('secrets.PAT_TOKEN') == 2
-    assert workflow.count('persist-credentials: false') == 6
+    assert workflow.count('token: ${{ github.token }}') == 5
+    assert workflow.count('secrets.PAT_TOKEN') == 3
+    assert workflow.count('persist-credentials: false') == 7
     assert caller.count('PAT_TOKEN: ${{ secrets.PAT_TOKEN }}') == 4
 
 
@@ -679,7 +679,7 @@ def test_trusted_policy_source(workflow: str) -> None:
         r"repository: Lightspeed-Intelligence/agentic-workflow-template\n\s+ref: ([^\s#]+)",
         workflow,
     )
-    assert len(refs) == 2, refs
+    assert len(refs) == 3, refs
     assert len(set(refs)) == 1, refs
     policy_sha = refs[0]
     assert re.fullmatch(r"[0-9a-f]{40}", policy_sha), policy_sha
@@ -694,14 +694,13 @@ def test_trusted_policy_source(workflow: str) -> None:
         "sparse-checkout: |\n"
         "            .github/scripts/pr-review/prepare-review-history.sh\n"
         "            ${{ inputs.setup_script }}\n"
-        "            ${{ inputs.business_reference }}\n"
     ) == 2
 
     for relative in (
         ".claude/skills/pr-review/SKILL.md",
         ".claude/skills/github-comment/SKILL.md",
         ".github/scripts/agentic/run-setup-hook.sh",
-        ".github/scripts/pr-review/append-business-reference.sh",
+        ".github/scripts/pr-review/central-business-rules.py",
     ):
         pinned = run(["git", "show", f"{policy_sha}:{relative}"], cwd=ROOT).stdout
         assert pinned == (ROOT / relative).read_text(), f"policy pin is stale for {relative}"
@@ -852,47 +851,10 @@ def test_blocking_findings_gate(workflow: str) -> None:
 
 
 def test_business_reference(workflow: str) -> None:
-    helper = ROOT / ".github/scripts/pr-review/append-business-reference.sh"
-    run(["bash", "-n", str(helper)])
-    for job in ("claude_review", "codex_review"):
-        block = job_block(workflow, job)
-        prepare = extract_step_run(block, "Prepare trusted review inputs")
-        assert "BUSINESS_REFERENCE: ${{ inputs.business_reference }}" in block
-        assert "            ${{ inputs.business_reference }}" in block
-        assert '.trusted-policy/.github/scripts/pr-review/append-business-reference.sh' in prepare
-        assert '"$BUSINESS_REFERENCE" "$GITHUB_WORKSPACE/.trusted-base" "$RUNNER_TEMP/review-prompt.txt"' in prepare
-        assert block.index("append-business-reference.sh\" ") < block.index("Run repository setup script")
-    with tempfile.TemporaryDirectory(prefix="business-reference-") as tmp_name:
-        temp = Path(tmp_name)
-        base = init_repo(temp / "base")
-        (base / ".github/review").mkdir(parents=True)
-        reference = ".github/review/core.md"
-        (base / reference).write_text("owner business facts\n")
-        (base / "link.md").symlink_to(reference)
-        git(base, "add", ".")
-        git(base, "commit", "-qm", "base facts")
-        prompt = temp / "prompt.txt"
-        for value, code, expected in (
-            ("", 0, ""),
-            (reference, 0, "owner business facts"),
-            ("missing.md", 0, "base commit 未包含"),
-            ("/etc/passwd", 1, ""),
-            ("../head/core.md", 1, ""),
-            ("a/../core.md", 1, ""),
-            ("a//core.md", 1, ""),
-            ("a/./core.md", 1, ""),
-            ("a;echo injected", 1, ""),
-            ("link.md", 1, ""),
-        ):
-            prompt.write_text("")
-            result = run(["bash", str(helper), value, str(base), str(prompt)], check=False)
-            assert result.returncode == code, (value, result)
-            assert expected in prompt.read_text()
-        # An untracked or newly added PR-head reference cannot substitute for base facts.
-        (base / "untracked.md").write_text("PR-head instruction\n")
-        prompt.write_text("")
-        result = run(["bash", str(helper), "untracked.md", str(base), str(prompt)])
-        assert "PR-head instruction" not in prompt.read_text()
+    run(["python3", str(ROOT / "scripts/test-central-business-rules.py")])
+    assert "business_reference" not in workflow
+    assert "vars.CR_RULES_REPOSITORY" in job_block(workflow, "business_context")
+
 
 
 def main() -> None:

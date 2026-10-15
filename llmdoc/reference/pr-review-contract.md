@@ -13,9 +13,16 @@
 - `use_feishu_notify` boolean, default `true`.
 - `extra_allowed_tools` comma-separated Claude tool patterns; only normalized repository-relative
   `git -C` plus `diff`, `log`, `show`, `status`, `rev-parse`, `merge-base` or `ls-files`.
-- `business_reference` optional normalized repository-relative path, read from the consumer PR base
-  SHA by the pinned `append-business-reference.sh`. Only tracked regular files are accepted; missing
-  base files warn and disable the business-reference checks, never falling back to PR-head content.
+- Organization Actions variables: `CR_RULES_REPOSITORY` (same-organization private repository),
+  `CR_RULES_REF` (default `main`). No consumer-owned business-rule file input.
+- A separate `business_context` job resolves a single commit, reads `repositories.json` and regular
+  Markdown blobs, and uploads `review-business-context`. Both reviewers consume that same artifact.
+- Public consumers skip private facts before any API call. An unset repository explicitly records
+  `disabled`; configured access/schema/missing-file errors fail preparation and block both models.
+- Mapped private consumers receive common facts plus scope/checks; unmapped consumers get common
+  facts with an explicit scope limitation; centrally excluded repositories receive only their reason.
+- Loaded/unmapped central context forces complete event-pinned base...head review on every round.
+  Publisher appends deterministic status/source SHA independently of model prose.
 - `setup_script` optional repository-relative path of `[A-Za-z0-9._/-]` characters, read from the PR
   base SHA. Empty is a no-op; a missing declared file warns and continues. Runs after review inputs are
   frozen and before CLI installation, bounded by the script's own 13-minute `timeout` with a step-level
@@ -24,9 +31,10 @@
 - `OPENAI_API_KEY` and `OPENAI_BASE_URL` optional. Codex resolves each independently as
   `OPENAI_*` first, then the corresponding `ANTHROPIC_*` value; Claude always uses `ANTHROPIC_*`.
 - Feishu webhook optional.
-- `PAT_TOKEN` optional for PR-head checkout of cross-repository private submodules. Both reviewer
-  checkouts resolve `PAT_TOKEN || github.token`, disable credential persistence, and never inject
-  PAT into an Agent process.
+- `PAT_TOKEN` is optional for PR-head private-submodule checkout and deterministic central-fact
+  preparation. These steps use `PAT_TOKEN || github.token`; models never receive it. Central rules
+  need Contents:read for the credential identity; caller forwarding and organization variable visibility
+  remain required deployment configuration, not automatic permission grants.
 
 ## Artifact Schema
 
@@ -79,7 +87,8 @@ Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even w
 
 ## Failure Semantics
 
-- Any Claude job non-success, including structured `review_status=INCOMPLETE`, triggers Codex.
+- Claude non-success, including structured `review_status=INCOMPLETE`, triggers Codex only after
+  business-context preparation succeeds. A preparation failure cannot be bypassed by fallback.
 - `INCOMPLETE` means core diff/worktree/context is inaccessible or meaningful code review cannot be
   performed. A project-specific test unavailable because of runner tooling is disclosed, not alone fatal.
 - Findings are successful reviewer results; `REQUEST_CHANGES` does not trigger fallback. After comment
