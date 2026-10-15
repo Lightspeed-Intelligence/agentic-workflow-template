@@ -42,11 +42,12 @@ class API:
     def files(self):
         return {"repositories.json": json.dumps(self.manifest), "common.md": self.text}
 
-    def __call__(self, path):
+    def __call__(self, path, *, sha_only=False):
         self.calls.append(path)
         if path == "repos/" + SOURCE:
             return {"private": self.private, "full_name": self.full_name}
         if path == "repos/" + SOURCE + "/commits/main":
+            assert sha_only
             return COMMIT
         files = self.files()
         blobs = {hashlib.sha1(text.encode()).hexdigest(): text for text in files.values()}
@@ -105,13 +106,13 @@ class CentralRulesTests(unittest.TestCase):
 
     def test_configured_source_errors_never_fall_back_to_generic_review(self):
         for status in (401, 403, 404, 500):
-            def failed_api(path):
+            def failed_api(path, **kwargs):
                 raise ValueError("API status " + str(status))
             with self.subTest(status=status), self.assertRaises(ValueError):
                 self.resolve(failed_api)
 
     def test_public_rules_source_and_incomplete_tree_are_rejected(self):
-        for field, value in (("private", False), ("full_name", "other/private-rules"), ("truncated", True), ("mode", "120000"), ("mode", "160000")):
+        for field, value in (("private", False), ("full_name", None), ("full_name", "other/private-rules"), ("truncated", True), ("mode", "120000"), ("mode", "160000")):
             api = API()
             setattr(api, field, value)
             with self.subTest(field=field, value=value), self.assertRaises(ValueError):
@@ -164,11 +165,14 @@ class CentralRulesTests(unittest.TestCase):
         opener = MagicMock()
         opener.open.return_value.__enter__.return_value = response
         with patch.dict(os.environ, GH_TOKEN="not-for-output"), patch.object(rules.urllib.request, "build_opener", return_value=opener) as build:
-            self.assertEqual(rules.github_api("repos/example/private-rules/commits/main"), COMMIT)
+            self.assertEqual(rules.github_api("repos/example/private-rules/commits/main", sha_only=True), COMMIT)
             request = opener.open.call_args.args[0]
             self.assertEqual(request.get_header("Accept"), "application/vnd.github.sha")
             self.assertIsInstance(build.call_args.args[0], rules.NoRedirect)
             self.assertIsNone(build.call_args.args[0].redirect_request(request, None, 302, "moved", {}, "https://other.invalid"))
+            response.read.return_value = b'{"tree":[],"truncated":false}'
+            self.assertEqual(rules.github_api("repos/example/commits/git/trees/" + COMMIT), {"tree": [], "truncated": False})
+            self.assertEqual(opener.open.call_args.args[0].get_header("Accept"), "application/vnd.github+json")
 
     def test_transport_http_failures_and_timeouts_are_non_success(self):
         for code in (301, 302, 401, 403, 404, 500):
@@ -256,8 +260,8 @@ class CentralRulesTests(unittest.TestCase):
     def test_missing_mapping_file_cannot_use_a_local_pr_head_replacement(self):
         api = API()
         original = api.__call__
-        def without_manifest(path):
-            response = original(path)
+        def without_manifest(path, **kwargs):
+            response = original(path, **kwargs)
             if "/git/trees/" in path:
                 response["tree"] = [entry for entry in response["tree"] if entry["path"] != "repositories.json"]
             return response

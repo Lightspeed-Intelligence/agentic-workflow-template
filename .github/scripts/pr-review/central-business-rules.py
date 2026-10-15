@@ -33,13 +33,12 @@ def decode_json(raw):
     return json.loads(raw, object_pairs_hook=unique_object)
 
 
-def github_api(path):
-    sha_response = "/commits/" in path
+def github_api(path, *, sha_only=False):
     request = urllib.request.Request(
         "https://api.github.com/" + path,
         headers={
             "Authorization": "Bearer " + os.environ["GH_TOKEN"],
-            "Accept": "application/vnd.github.sha" if sha_response else "application/vnd.github+json",
+            "Accept": "application/vnd.github.sha" if sha_only else "application/vnd.github+json",
             "X-GitHub-Api-Version": "2022-11-28",
         },
     )
@@ -52,7 +51,12 @@ def github_api(path):
         raise ValueError(f"central rules API returned HTTP {code}") from None
     if len(body) > MAX_BYTES:
         raise ValueError("central rules API response is too large")
-    return body.decode("ascii").strip() if sha_response else decode_json(body)
+    if sha_only:
+        return body.decode("ascii").strip()
+    value = decode_json(body)
+    if not isinstance(value, dict):
+        raise ValueError("central rules API response is not an object")
+    return value
 
 
 def regular_path(value):
@@ -78,11 +82,12 @@ def resolve(source, ref, consumer, private, api=github_api):
         raise ValueError("invalid central rules ref")
     prefix = "repos/" + source
     repository = api(prefix)
-    if repository.get("full_name", "").lower() != source.lower():
+    full_name = repository.get("full_name")
+    if not isinstance(full_name, str) or full_name.lower() != source.lower():
         raise ValueError("central rules repository identity does not match configuration")
     if repository.get("private") is not True:
         raise ValueError("central business rules repository must be private")
-    sha = api(prefix + "/commits/" + urllib.parse.quote(ref, safe=""))
+    sha = api(prefix + "/commits/" + urllib.parse.quote(ref, safe=""), sha_only=True)
     if not isinstance(sha, str) or not SHA.fullmatch(sha):
         raise ValueError("central rules ref did not resolve to a full commit SHA")
     tree = api(prefix + "/git/trees/" + sha + "?recursive=1")
