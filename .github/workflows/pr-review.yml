@@ -15,10 +15,6 @@ on:
         description: "Claude Code 主链路的额外只读 Git 工具模式（逗号分隔），仅接受 Bash(git -C <path> <read-only-subcommand>:*)；这是仓库特定工具提示，不是权限安全边界"
         type: string
         default: ""
-      business_reference:
-        description: "消费仓库的业务链路参考文件，从 PR base commit 读取；留空不启用。缺失时披露限制，不读取 PR head 副本"
-        type: string
-        default: ""
       setup_script:
         description: "消费仓库环境准备脚本的相对路径，从 PR base commit 读取；留空则不执行。执行失败不终止审查，Agent 会披露受限的验证"
         type: string
@@ -33,7 +29,7 @@ on:
         required: false
       OPENAI_BASE_URL:
         required: false
-      # 可选；仅供 checkout 读取跨仓库私有 submodule，不注入 Agent 进程。
+      # 可选；供 checkout 读取私有 submodule 及独立准备 job 读取中央业务事实，不注入 Agent。
       PAT_TOKEN:
         required: false
       FEISHU_WEBHOOK_TOKEN:
@@ -44,10 +40,52 @@ on:
         value: ${{ jobs.publish.outputs.structured_output }}
 
 jobs:
+  business_context:
+    name: Resolve central business rules
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout pinned business-context loader
+        uses: actions/checkout@v5
+        with:
+          repository: Lightspeed-Intelligence/agentic-workflow-template
+          ref: 3c17bf2bdf822dfd425f37b418e70ab1ed5e9459
+          path: .trusted-business-loader
+          sparse-checkout: .github/scripts/pr-review/central-business-rules.py
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+          token: ${{ github.token }}
+
+      - name: Freeze central business rules
+        env:
+          RULES_REPOSITORY: ${{ vars.CR_RULES_REPOSITORY }}
+          RULES_REF: ${{ vars.CR_RULES_REF || 'main' }}
+          CONSUMER_REPOSITORY: ${{ github.repository }}
+          PRIVATE_REPOSITORY: ${{ github.event.repository.private }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN || github.token }}
+        run: |
+          python3 .trusted-business-loader/.github/scripts/pr-review/central-business-rules.py \
+            --source "$RULES_REPOSITORY" --ref "$RULES_REF" \
+            --consumer "$CONSUMER_REPOSITORY" --private "$PRIVATE_REPOSITORY" \
+            --output-dir "$RUNNER_TEMP/business-context"
+
+      - name: Upload frozen business context
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: review-business-context
+          path: ${{ runner.temp }}/business-context/
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 1
+
   # Agent job 只持有只读 GITHUB_TOKEN。checkout 临时使用该 token 后立即移除
   # Git 凭据；Agent 步骤本身仅收到模型 API key，不收到 GitHub token 或 PAT。
   claude_review:
     name: Review with Claude Code (primary)
+    needs: business_context
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -77,7 +115,6 @@ jobs:
           sparse-checkout: |
             .github/scripts/pr-review/prepare-review-history.sh
             ${{ inputs.setup_script }}
-            ${{ inputs.business_reference }}
           sparse-checkout-cone-mode: false
           persist-credentials: false
           token: ${{ github.token }}
@@ -86,16 +123,21 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: e90b603e91f15cebed6cba684afff2b4a40262b8
+          ref: 3c17bf2bdf822dfd425f37b418e70ab1ed5e9459
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review
             .claude/skills/github-comment
             .github/scripts/agentic/run-setup-hook.sh
-            .github/scripts/pr-review/append-business-reference.sh
           sparse-checkout-cone-mode: false
           persist-credentials: false
           token: ${{ github.token }}
+
+      - name: Download frozen business context
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: review-business-context
+          path: ${{ runner.temp }}/business-context
 
       - name: Prepare trusted review inputs
         env:
@@ -104,7 +146,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          BUSINESS_REFERENCE: ${{ inputs.business_reference }}
         run: |
           jq '{
             number: .pull_request.number,
@@ -128,6 +169,15 @@ jobs:
               available: false,
               previous: null
             }' > "$RUNNER_TEMP/review-history.json"
+            git diff --find-renames "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/pr.diff"
+            git log --format='%H %s' "$BASE_SHA..$HEAD_SHA" > "$RUNNER_TEMP/pr-commits.txt"
+          fi
+
+          # Central rule updates must re-evaluate the complete PR, even when code history permits incremental review.
+          if jq -e '.status == "loaded" or .status == "unmapped"' "$RUNNER_TEMP/business-context/metadata.json" > /dev/null; then
+            jq '.mode = "full" | .reason = "central_business_rules_full_review"' \
+              "$RUNNER_TEMP/review-history.json" > "$RUNNER_TEMP/review-history-full.json"
+            mv "$RUNNER_TEMP/review-history-full.json" "$RUNNER_TEMP/review-history.json"
             git diff --find-renames "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/pr.diff"
             git log --format='%H %s' "$BASE_SHA..$HEAD_SHA" > "$RUNNER_TEMP/pr-commits.txt"
           fi
@@ -210,8 +260,7 @@ jobs:
           - APPROVE 仅当三个问题计数均为 0；critical_count 或 important_count 非 0 时必须 REQUEST_CHANGES
           - 代码链接必须使用完整 head commit SHA，不得使用分支名
           PROMPT_EOF
-          bash "$GITHUB_WORKSPACE/.trusted-policy/.github/scripts/pr-review/append-business-reference.sh" \
-            "$BUSINESS_REFERENCE" "$GITHUB_WORKSPACE/.trusted-base" "$RUNNER_TEMP/review-prompt.txt"
+          cat "$RUNNER_TEMP/business-context/context.md" >> "$RUNNER_TEMP/review-prompt.txt"
 
       # 审查范围已冻结到 RUNNER_TEMP，准备脚本无法再影响审查哪些改动，只能影响
       # 用什么工具验证。位置仍在安装 CLI 之前，因此它写入的 PATH 对 Agent 有效。
@@ -346,8 +395,8 @@ jobs:
   # 独立 runner 避免失败的 Claude Code 进程污染 fallback 的工作树、工具或输入。
   codex_review:
     name: Review with Codex (fallback)
-    needs: claude_review
-    if: always() && github.event.pull_request.draft == false && needs.claude_review.result != 'success'
+    needs: [business_context, claude_review]
+    if: always() && github.event.pull_request.draft == false && needs.business_context.result == 'success' && needs.claude_review.result != 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -376,7 +425,6 @@ jobs:
           sparse-checkout: |
             .github/scripts/pr-review/prepare-review-history.sh
             ${{ inputs.setup_script }}
-            ${{ inputs.business_reference }}
           sparse-checkout-cone-mode: false
           persist-credentials: false
           token: ${{ github.token }}
@@ -385,16 +433,21 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: e90b603e91f15cebed6cba684afff2b4a40262b8
+          ref: 3c17bf2bdf822dfd425f37b418e70ab1ed5e9459
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review
             .claude/skills/github-comment
             .github/scripts/agentic/run-setup-hook.sh
-            .github/scripts/pr-review/append-business-reference.sh
           sparse-checkout-cone-mode: false
           persist-credentials: false
           token: ${{ github.token }}
+
+      - name: Download frozen business context
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: review-business-context
+          path: ${{ runner.temp }}/business-context
 
       - name: Prepare trusted review inputs
         env:
@@ -403,7 +456,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          BUSINESS_REFERENCE: ${{ inputs.business_reference }}
         run: |
           jq '{
             number: .pull_request.number,
@@ -427,6 +479,15 @@ jobs:
               available: false,
               previous: null
             }' > "$RUNNER_TEMP/review-history.json"
+            git diff --find-renames "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/pr.diff"
+            git log --format='%H %s' "$BASE_SHA..$HEAD_SHA" > "$RUNNER_TEMP/pr-commits.txt"
+          fi
+
+          # Central rule updates must re-evaluate the complete PR, even when code history permits incremental review.
+          if jq -e '.status == "loaded" or .status == "unmapped"' "$RUNNER_TEMP/business-context/metadata.json" > /dev/null; then
+            jq '.mode = "full" | .reason = "central_business_rules_full_review"' \
+              "$RUNNER_TEMP/review-history.json" > "$RUNNER_TEMP/review-history-full.json"
+            mv "$RUNNER_TEMP/review-history-full.json" "$RUNNER_TEMP/review-history.json"
             git diff --find-renames "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/pr.diff"
             git log --format='%H %s' "$BASE_SHA..$HEAD_SHA" > "$RUNNER_TEMP/pr-commits.txt"
           fi
@@ -509,8 +570,7 @@ jobs:
           - APPROVE 仅当三个问题计数均为 0；critical_count 或 important_count 非 0 时必须 REQUEST_CHANGES
           - 代码链接必须使用完整 head commit SHA，不得使用分支名
           PROMPT_EOF
-          bash "$GITHUB_WORKSPACE/.trusted-policy/.github/scripts/pr-review/append-business-reference.sh" \
-            "$BUSINESS_REFERENCE" "$GITHUB_WORKSPACE/.trusted-base" "$RUNNER_TEMP/review-prompt.txt"
+          cat "$RUNNER_TEMP/business-context/context.md" >> "$RUNNER_TEMP/review-prompt.txt"
 
       # 与 Claude Code job 同一处理：范围已冻结，准备脚本只影响验证工具链。
       - name: Run repository setup script
@@ -607,7 +667,7 @@ jobs:
   # 唯一拥有 PR 写权限的 job。它不运行 Agent，也不接收模型 API key。
   publish:
     name: review
-    needs: [claude_review, codex_review]
+    needs: [business_context, claude_review, codex_review]
     if: always() && github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
@@ -616,6 +676,13 @@ jobs:
     outputs:
       structured_output: ${{ steps.result.outputs.structured_output }}
     steps:
+      - name: Download frozen business context
+        if: needs.business_context.result == 'success'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: review-business-context
+          path: ${{ runner.temp }}/business-context
+
       - name: Download Claude review result
         if: needs.claude_review.result == 'success'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -658,6 +725,7 @@ jobs:
           ' "$REVIEW_FILE" > /dev/null
 
           jq -r '.comment_body' "$REVIEW_FILE" > "$RUNNER_TEMP/review-comment.md"
+          cat "$RUNNER_TEMP/business-context/provenance.md" >> "$RUNNER_TEMP/review-comment.md"
           REVIEWER=$(jq -r '.reviewer' "$REVIEW_FILE")
           if [ "$REVIEWER" = "claude" ]; then
             FOOTER="本次审查由 Claude Code 主链路 (claude-opus-5-5) 完成。"
