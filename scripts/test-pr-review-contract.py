@@ -667,9 +667,9 @@ def test_model_names(workflow: str, readme: str, question_workflow: str) -> None
 def test_checkout_credentials(workflow: str, caller: str) -> None:
     checkout_token = 'token: ${{ secrets.PAT_TOKEN || github.token }}'
     assert workflow.count(checkout_token) == 2
-    assert workflow.count('token: ${{ github.token }}') == 5
-    assert workflow.count('secrets.PAT_TOKEN') == 3
-    assert workflow.count('persist-credentials: false') == 7
+    assert workflow.count('token: ${{ github.token }}') == 4
+    assert workflow.count('secrets.PAT_TOKEN') == 2
+    assert workflow.count('persist-credentials: false') == 6
     assert caller.count('PAT_TOKEN: ${{ secrets.PAT_TOKEN }}') == 4
 
 
@@ -679,7 +679,7 @@ def test_trusted_policy_source(workflow: str) -> None:
         r"repository: Lightspeed-Intelligence/agentic-workflow-template\n\s+ref: ([^\s#]+)",
         workflow,
     )
-    assert len(refs) == 3, refs
+    assert len(refs) == 2, refs
     assert len(set(refs)) == 1, refs
     policy_sha = refs[0]
     assert re.fullmatch(r"[0-9a-f]{40}", policy_sha), policy_sha
@@ -700,7 +700,6 @@ def test_trusted_policy_source(workflow: str) -> None:
         ".claude/skills/pr-review/SKILL.md",
         ".claude/skills/github-comment/SKILL.md",
         ".github/scripts/agentic/run-setup-hook.sh",
-        ".github/scripts/pr-review/central-business-rules.py",
     ):
         pinned = run(["git", "show", f"{policy_sha}:{relative}"], cwd=ROOT).stdout
         assert pinned == (ROOT / relative).read_text(), f"policy pin is stale for {relative}"
@@ -850,13 +849,6 @@ def test_blocking_findings_gate(workflow: str) -> None:
     assert "critical_count" not in job_block(workflow, "codex_review").split("if:", 1)[1].split("runs-on:", 1)[0]
 
 
-def test_business_reference(workflow: str) -> None:
-    run(["python3", str(ROOT / "scripts/test-central-business-rules.py")])
-    assert "business_reference" not in workflow
-    assert "vars.CR_RULES_REPOSITORY" in job_block(workflow, "business_context")
-
-
-
 def main() -> None:
     workflow = WORKFLOW.read_text()
     caller = CALLER.read_text()
@@ -873,7 +865,6 @@ def main() -> None:
     ready_event = r"pull_request:\n\s+types: \[[^]\n]*\bready_for_review\b[^]\n]*\]"
     assert re.search(ready_event, caller), "draft-to-ready PRs must trigger fresh review"
     assert re.search(ready_event, readme), "caller example must cover draft-to-ready review"
-    test_business_reference(workflow)
     test_extra_allowed_tools(workflow)
     test_setup_hook_wiring(workflow)
     test_setup_hook_behavior()

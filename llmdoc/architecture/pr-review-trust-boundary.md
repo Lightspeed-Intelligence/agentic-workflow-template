@@ -8,7 +8,6 @@ Allow deep local code analysis while preventing model-driven processes from writ
 
 ```text
 pull_request event
-  -> isolated business-context resolution: one private rules commit, no PR-head code
   -> deterministic preparation: authenticate structured Bot history, select full/incremental range
   -> optional base-pinned setup_script: self-bounded 13m, non-fatal, disclosed in the prompt
   -> claude_review: read-only token, full local execution, claude-opus-5-5
@@ -16,7 +15,6 @@ pull_request event
   -> one-day structured artifact
   -> publish: deterministic validation, pull-requests: write, gh pr comment
   -> optional Feishu notification
-  -> fail stable review check on validated BLOCKER findings
 ```
 
 ## Trust Classes
@@ -25,13 +23,6 @@ pull_request event
   complete single-file `pr-review/SKILL.md`, `github-comment/SKILL.md` and
   `.github/scripts/agentic/run-setup-hook.sh` into sanitized `.trusted-policy`. This revision is the
   same single runtime pin the four agentic workflows use.
-- Central business facts come from organization variables and a same-organization private rules
-  repository. A template-pinned parser resolves one SHA, accepts JSON/regular Markdown blobs only,
-  and uploads one immutable-per-run artifact for both reviewers. It executes no rules-repository code.
-- Public consumers skip private facts before network access; configured source failures block both
-  models and the stable review result. Disabled/unmapped/excluded states remain visible in comments.
-- Central facts are business data, not executable policy. Loaded/unmapped contexts force a full PR
-  review each round so rule changes cannot inherit a prior incremental cutoff.
 - Consumer repositories do not need to copy template-owned reviewer policy files. Their exact base-SHA
   checkout in `.trusted-base` supplies only the optional history-preparation and environment-setup
   scripts.
@@ -50,18 +41,15 @@ pull_request event
 
 ## Credential Invariants
 
-- `business_context`: only `contents: read`; no model, no PR-head checkout, no PR-write authority.
 - `claude_review` and `codex_review`: only `contents: read` and `pull-requests: read`.
 - Reviewer PR-head checkouts may use optional `PAT_TOKEN` to read cross-repository private
   submodules and use `persist-credentials: false`; trusted-policy checkout and preparation use the
   read-only job token. Agent processes receive model credentials but no GitHub/PAT token.
 - Codex prefers optional `OPENAI_API_KEY` and `OPENAI_BASE_URL`; each missing value independently
   falls back to its `ANTHROPIC_*` counterpart. Claude receives only the `ANTHROPIC_*` pair.
-- `PAT_TOKEN` is forwarded for PR-head private-submodule checkout and the isolated deterministic
-  central-facts API step, with `github.token` as fallback. The latter reads only a same-organization
-  private repository and never runs a model or PR-head code. Neither secret crosses into artifacts.
-- Consumer-base history and immutable template-policy/loader checkouts use `github.token`; checkout
-  credentials are removed before Agent execution. The publisher only downloads frozen provenance.
+- `PAT_TOKEN` is forwarded by callers only for checkout, with `github.token` as the fallback.
+- Only PR-head checkout may use that PAT fallback. Consumer-base history and immutable template-policy
+  checkouts use `github.token`; all checkout credentials are removed before Agent execution.
 - `publish`: receives GitHub PR-write authority and optional Feishu webhook, but no model key and no PR-head checkout.
 
 ## Local Privilege

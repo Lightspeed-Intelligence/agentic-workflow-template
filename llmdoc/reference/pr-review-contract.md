@@ -13,16 +13,6 @@
 - `use_feishu_notify` boolean, default `true`.
 - `extra_allowed_tools` comma-separated Claude tool patterns; only normalized repository-relative
   `git -C` plus `diff`, `log`, `show`, `status`, `rev-parse`, `merge-base` or `ls-files`.
-- Organization Actions variables: `CR_RULES_REPOSITORY` (same-organization private repository),
-  `CR_RULES_REF` (default `main`). No consumer-owned business-rule file input.
-- A separate `business_context` job resolves a single commit, reads `repositories.json` and regular
-  Markdown blobs, and uploads `review-business-context`. Both reviewers consume that same artifact.
-- Public consumers skip private facts before any API call. An unset repository explicitly records
-  `disabled`; configured access/schema/missing-file errors fail preparation and block both models.
-- Mapped private consumers receive common facts plus scope/checks; unmapped consumers get common
-  facts with an explicit scope limitation; centrally excluded repositories receive only their reason.
-- Loaded/unmapped central context forces complete event-pinned base...head review on every round.
-  Publisher appends deterministic status/source SHA independently of model prose.
 - `setup_script` optional repository-relative path of `[A-Za-z0-9._/-]` characters, read from the PR
   base SHA. Empty is a no-op; a missing declared file warns and continues. Runs after review inputs are
   frozen and before CLI installation, bounded by the script's own 13-minute `timeout` with a step-level
@@ -31,10 +21,9 @@
 - `OPENAI_API_KEY` and `OPENAI_BASE_URL` optional. Codex resolves each independently as
   `OPENAI_*` first, then the corresponding `ANTHROPIC_*` value; Claude always uses `ANTHROPIC_*`.
 - Feishu webhook optional.
-- `PAT_TOKEN` is optional for PR-head private-submodule checkout and deterministic central-fact
-  preparation. These steps use `PAT_TOKEN || github.token`; models never receive it. Central rules
-  need Contents:read for the credential identity; caller forwarding and organization variable visibility
-  remain required deployment configuration, not automatic permission grants.
+- `PAT_TOKEN` optional for PR-head checkout of cross-repository private submodules. Both reviewer
+  checkouts resolve `PAT_TOKEN || github.token`, disable credential persistence, and never inject
+  PAT into an Agent process.
 
 ## Artifact Schema
 
@@ -87,14 +76,12 @@ Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even w
 
 ## Failure Semantics
 
-- Claude non-success, including structured `review_status=INCOMPLETE`, triggers Codex only after
-  business-context preparation succeeds. A preparation failure cannot be bypassed by fallback.
+- Any Claude job non-success, including structured `review_status=INCOMPLETE`, triggers Codex.
 - `INCOMPLETE` means core diff/worktree/context is inaccessible or meaningful code review cannot be
   performed. A project-specific test unavailable because of runner tooling is disclosed, not alone fatal.
-- Findings are successful reviewer results; `REQUEST_CHANGES` does not trigger fallback. After comment
-  and notification, the stable publisher `review` job fails when validated `critical_count > 0`.
-  MAJOR-only results remain successful warnings. Consumers must require this check and trigger
-  `ready_for_review` so draft-to-ready transitions get a fresh review.
+- Findings are successful review results; `REQUEST_CHANGES` does not trigger fallback. After comment
+  and notification, validated `critical_count > 0` fails the stable publisher `review` job; MAJOR-only
+  findings remain warnings. Consumers must require this check and listen for `ready_for_review`.
 - If neither reviewer succeeds, notification may run but the publisher job ultimately fails.
 - Feishu is best effort and cannot turn a failed review into success or a successful review into failure.
 - `setup_script` runtime failure or its own 13-minute `timeout` is non-fatal: the exit code (124 for a
