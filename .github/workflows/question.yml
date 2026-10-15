@@ -109,7 +109,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 3c17bf2bdf822dfd425f37b418e70ab1ed5e9459
+          ref: 931c5feb357b5832f17cad09acd1872c8cc59dff
           path: runtime
           sparse-checkout: |
             .github/actions/run-agent
@@ -217,7 +217,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 3c17bf2bdf822dfd425f37b418e70ab1ed5e9459
+          ref: 931c5feb357b5832f17cad09acd1872c8cc59dff
           path: runtime
           sparse-checkout: |
             .github/actions/run-agent
@@ -405,7 +405,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 3c17bf2bdf822dfd425f37b418e70ab1ed5e9459
+          ref: 931c5feb357b5832f17cad09acd1872c8cc59dff
           path: runtime
           sparse-checkout: .github/actions/feishu-notify
           sparse-checkout-cone-mode: false

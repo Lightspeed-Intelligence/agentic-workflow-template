@@ -52,7 +52,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 3c17bf2bdf822dfd425f37b418e70ab1ed5e9459
+          ref: 931c5feb357b5832f17cad09acd1872c8cc59dff
           path: .trusted-business-loader
           sparse-checkout: .github/scripts/pr-review/central-business-rules.py
           sparse-checkout-cone-mode: false
@@ -123,7 +123,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 3c17bf2bdf822dfd425f37b418e70ab1ed5e9459
+          ref: 931c5feb357b5832f17cad09acd1872c8cc59dff
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review
@@ -433,7 +433,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: 3c17bf2bdf822dfd425f37b418e70ab1ed5e9459
+          ref: 931c5feb357b5832f17cad09acd1872c8cc59dff
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review
@@ -676,6 +676,12 @@ jobs:
     outputs:
       structured_output: ${{ steps.result.outputs.structured_output }}
     steps:
+      - name: Fail when central business rules could not be prepared
+        if: needs.business_context.result != 'success'
+        run: |
+          echo "::error::中央业务规则准备失败；未执行 Claude/Codex 审查。检查组织变量、规则仓库读取权限及准备 job。"
+          exit 1
+
       - name: Download frozen business context
         if: needs.business_context.result == 'success'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -776,6 +782,7 @@ jobs:
         env:
           WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
           RESULT_OUTCOME: ${{ steps.result.outcome }}
+          BUSINESS_CONTEXT_RESULT: ${{ needs.business_context.result }}
           CONCLUSION: ${{ steps.result.outputs.conclusion }}
           REVIEW_DESCRIPTION: ${{ steps.result.outputs.description }}
           CRITICAL: ${{ steps.result.outputs.critical_count }}
@@ -812,6 +819,9 @@ jobs:
           else
             CONCLUSION="UNKNOWN"
             DESCRIPTION="PR 审查流程失败，详情见 workflow run"
+            if [ "$BUSINESS_CONTEXT_RESULT" != "success" ]; then
+              DESCRIPTION="中央业务规则准备失败，未执行模型审查；请检查配置和读取权限"
+            fi
             CRITICAL=0
             IMPORTANT=0
             SUGGESTION=0
@@ -886,7 +896,7 @@ jobs:
           fi
 
       - name: Fail when no reviewer succeeded
-        if: always() && needs.claude_review.result != 'success' && needs.codex_review.result != 'success'
+        if: always() && needs.business_context.result == 'success' && needs.claude_review.result != 'success' && needs.codex_review.result != 'success'
         run: |
           echo "::error::Claude Code 主链路与 Codex fallback 均执行失败"
           exit 1
