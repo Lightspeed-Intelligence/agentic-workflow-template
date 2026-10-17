@@ -83,7 +83,7 @@ graph TB
 
 ```mermaid
 flowchart LR
-    GH["GitHub 事件"] --> PR["pull_request<br/>opened / synchronize / reopened"]
+    GH["GitHub 事件"] --> PR["pull_request<br/>opened / synchronize / reopened / ready_for_review"]
     GH --> IS["issues<br/>opened"]
     GH --> IC["issue_comment<br/>created"]
 
@@ -121,7 +121,7 @@ question:
 
 ## Code Review 的详细流程
 
-这是本文重点。当一个非 Draft 的 PR 被 opened / synchronize / reopened 时，审查流程启动：
+这是本文重点。当一个非 Draft 的 PR 被 opened / synchronize / reopened / ready_for_review 时，审查流程启动：
 
 ```mermaid
 flowchart TD
@@ -197,6 +197,18 @@ Agent 有完整本地权限，但 runner 只预装通用工具链。需要特定
 应记录但不单独使审查失败」是同一条约定。
 
 ---
+
+## 核心链路规则与合并门禁
+
+核心链路通用规则直接维护在共享 `pr-review/SKILL.md`，所有调用方使用同一固定版本，
+无需新增仓库、组织变量或业务规则文件。依据当前代码、接口契约和仓库已有文档，检查入口
+中断、商品/资金/权益错位、事件与归因回归、状态口径及关键流程阻塞；未知业务事实列限制，
+不猜内部事件或指标定义。正常可达的条件性故障需按证据报告，合法策略变化不自动计问题。
+
+publisher 发出评论和通知后，`critical_count > 0` 会使稳定的 `pr-review / review` 检查
+失败；仅 MAJOR 仍为告警。该门禁不触发模型 fallback，调用方须在分支保护中要求此检查，
+并监听 `ready_for_review`，确保草稿转待审后重新执行审查。跟随 `@main` 的消费者在模板合并
+后通过新事件使用新版；固定旧 SHA 或独立工作流仍须一次升级。CR 通过不代表线上验收通过。
 
 ## 为什么只对少量小问题做增量
 
@@ -443,7 +455,7 @@ flowchart TD
     end
 
     subgraph pr_event["PR 被创建或更新"]
-        pr_trigger["pull_request:<br/>opened / synchronize / reopened"]
+        pr_trigger["pull_request:<br/>opened / synchronize / reopened / ready_for_review"]
         pr_trigger --> review["🔍 pr-review<br/>自动审查代码质量"]
     end
 

@@ -47,7 +47,7 @@ on:
   issue_comment:
     types: [created]
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
   # Issue 创建时自动分析；不会自动修复
@@ -247,6 +247,16 @@ PR 审查规范由 reusable workflow 所在的 template 仓库以固定 commit �
 调用方仓库无需复制 reviewer policy。完整审查规范集中在单个 `pr-review/SKILL.md`
 中；调用方 base checkout 只用于获取可选的历史审查准备脚本和环境准备脚本，
 缺失时分别安全降级为完整审查和不执行准备。
+
+核心链路通用规则直接维护在共享 `pr-review/SKILL.md`，所有调用方使用同一固定版本，
+无需新增仓库、组织变量或业务规则文件。依据当前代码、接口契约和仓库已有文档，检查入口
+中断、商品/资金/权益错位、事件与归因回归、状态口径及关键流程阻塞；未知业务事实列限制，
+不猜内部事件或指标定义。正常可达的条件性故障需按证据报告，合法策略变化不自动计问题。
+
+publisher 发出评论和通知后，`critical_count > 0` 会使稳定的 `pr-review / review` 检查
+失败；仅 MAJOR 仍为告警。该门禁不触发模型 fallback，调用方须在分支保护中要求此检查，
+并监听 `ready_for_review`，确保草稿转待审后重新执行审查。跟随 `@main` 的消费者在模板合并
+后通过新事件使用新版；固定旧 SHA 或独立工作流仍须一次升级。CR 通过不代表线上验收通过。
 
 五个 workflow 的审查规范、Skill、共享脚本、runner 与 publisher 都来自同一个模板
 commit。这个固定版本号是手工推进的，发布分两步：先提交运行时字节，再把所有 workflow

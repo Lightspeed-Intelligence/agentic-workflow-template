@@ -835,6 +835,20 @@ def test_prepare_script_selection(workflow: str, repo_info: dict[str, str]) -> N
         assert not trace.exists()
 
 
+def test_blocking_findings_gate(workflow: str) -> None:
+    publisher = job_block(workflow, "publish")
+    gate = extract_step_run(workflow, "Fail review on blocking findings")
+    assert "name: review" in publisher
+    assert publisher.index("Notify Feishu") < publisher.index("Fail review on blocking findings")
+    assert "if: steps.result.outcome == 'success'" in publisher
+    assert "CRITICAL_COUNT: ${{ steps.result.outputs.critical_count }}" in publisher
+    for count, expected in ((0, 0), (1, 1), (2, 1), ("1e+30", 1), ("0.0", 0)):
+        result = run(["bash", "-c", gate], env=os.environ | {"CRITICAL_COUNT": str(count)}, check=False)
+        assert result.returncode == expected, (count, result)
+    # Model jobs remain successful for valid findings; only publication gates merge.
+    assert "critical_count" not in job_block(workflow, "codex_review").split("if:", 1)[1].split("runs-on:", 1)[0]
+
+
 def main() -> None:
     workflow = WORKFLOW.read_text()
     caller = CALLER.read_text()
@@ -847,6 +861,10 @@ def main() -> None:
         test_history_selection(repo_info)
     test_schemas(workflow)
     test_publisher_gate(workflow)
+    test_blocking_findings_gate(workflow)
+    ready_event = r"pull_request:\n\s+types: \[[^]\n]*\bready_for_review\b[^]\n]*\]"
+    assert re.search(ready_event, caller), "draft-to-ready PRs must trigger fresh review"
+    assert re.search(ready_event, readme), "caller example must cover draft-to-ready review"
     test_extra_allowed_tools(workflow)
     test_setup_hook_wiring(workflow)
     test_setup_hook_behavior()

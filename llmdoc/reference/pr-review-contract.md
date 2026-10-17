@@ -79,7 +79,9 @@ Only `COMPLETE` is publishable. `INCOMPLETE` is a structured soft failure even w
 - Any Claude job non-success, including structured `review_status=INCOMPLETE`, triggers Codex.
 - `INCOMPLETE` means core diff/worktree/context is inaccessible or meaningful code review cannot be
   performed. A project-specific test unavailable because of runner tooling is disclosed, not alone fatal.
-- Findings are successful review results; `REQUEST_CHANGES` does not trigger fallback.
+- Findings are successful review results; `REQUEST_CHANGES` does not trigger fallback. After comment
+  and notification, validated `critical_count > 0` fails the stable publisher `review` job; MAJOR-only
+  findings remain warnings. Consumers must require this check and listen for `ready_for_review`.
 - If neither reviewer succeeds, notification may run but the publisher job ultimately fails.
 - Feishu is best effort and cannot turn a failed review into success or a successful review into failure.
 - `setup_script` runtime failure or its own 13-minute `timeout` is non-fatal: the exit code (124 for a

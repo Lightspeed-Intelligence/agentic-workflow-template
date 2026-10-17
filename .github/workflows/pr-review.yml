@@ -81,7 +81,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: e099698751dc17f613c2ff0eec66047000363f92
+          ref: 098fe0949424b9c17f916da077245a07dc920ce4
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review
@@ -375,7 +375,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: e099698751dc17f613c2ff0eec66047000363f92
+          ref: 098fe0949424b9c17f916da077245a07dc920ce4
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review
@@ -792,6 +792,16 @@ jobs:
           done
           echo "::error::飞书通知发送失败: ${RESP:-网络错误/无响应}"
           exit 1
+
+      - name: Fail review on blocking findings
+        if: steps.result.outcome == 'success'
+        env:
+          CRITICAL_COUNT: ${{ steps.result.outputs.critical_count }}
+        run: |
+          if jq -en --argjson count "$CRITICAL_COUNT" '$count > 0' > /dev/null; then
+            echo "::error::PR review found $CRITICAL_COUNT BLOCKER finding(s); fix before merge"
+            exit 1
+          fi
 
       - name: Fail when no reviewer succeeded
         if: always() && needs.claude_review.result != 'success' && needs.codex_review.result != 'success'
