@@ -81,7 +81,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: e099698751dc17f613c2ff0eec66047000363f92
+          ref: 098fe0949424b9c17f916da077245a07dc920ce4
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review
@@ -375,7 +375,7 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: Lightspeed-Intelligence/agentic-workflow-template
-          ref: e099698751dc17f613c2ff0eec66047000363f92
+          ref: 098fe0949424b9c17f916da077245a07dc920ce4
           path: .trusted-policy
           sparse-checkout: |
             .claude/skills/pr-review
