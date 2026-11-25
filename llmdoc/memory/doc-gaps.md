@@ -1,9 +1,16 @@
 # Documentation Gaps
 
-- `update-llmdoc.yml` assumes an existing llmdoc tree and is not called by local `ci.yml`; its
+- `update-llmdoc.yml` assumes an existing llmdoc tree and is not called by `ci.yml`; its
   bootstrap and scheduled external-caller story is still not documented.
-- README's external caller listens to Issue `opened,labeled`, while local `ci.yml` intentionally listens only to `opened`.
-- `design.md` contains legacy tool-specific system instructions; executable workflows and current Skills supersede them.
+- `design.md` is kept as a historical first draft. Its legacy tool-specific prompt block was removed;
+  the remaining notes on branch names, automatic bug fixes and review range are outdated.
+- Template cleanup's fork exclusion has no live verification; only the template, created-from-template,
+  multi-commit and manual-confirmation paths were exercised on GitHub.
+- `feishu-notify` does not skip when `FEISHU_WEBHOOK_TOKEN` is empty: it retries four times and logs an
+  error, while `pr-review.yml` skips with a notice. A repository created from the template without that
+  secret sees this on every non-review run. Fixing it changes pinned runtime and needs a pin advance.
+- Whether organization-level secrets reach a newly created public repository is unverified; the live
+  check used a private repository.
 - Fork-PR behavior for secret-backed review is not defined.
 - No automated integration fixture exercises a private cross-repository submodule or a legacy
   consumer without the latest template files; the local contract harness verifies static credential

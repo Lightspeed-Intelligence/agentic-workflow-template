@@ -1,0 +1,88 @@
+# 模板仓库自身的 CI：调用本地的 reusable workflows，让改动在合入前就被自己的新版本处理。
+# 每个 job 都只在带模板标记的仓库里运行；从模板创建的新仓库由 template-cleanup.yml 删除本文件，
+# 改用 ci.yml 远程调用。
+name: Template CI
+
+on:
+  issues:
+    types: [opened]  # 只监听 opened，避免 labeled 重复触发
+  issue_comment:
+    types: [created]
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  pr-review-contract:
+    if: github.event_name == 'pull_request' && github.event.repository.is_template
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout contract tests
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Test PR review contract
+        run: python3 scripts/test-pr-review-contract.py
+
+      - name: Test agentic workflow contracts
+        run: python3 scripts/test-agentic-workflow-contract.py
+
+  issue-dispatch:
+    if: github.event_name == 'issues' && github.event.repository.is_template
+    permissions:
+      contents: read
+      issues: write
+    uses: ./.github/workflows/issue-dispatch.yml
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
+
+  implement:
+    if: github.event_name == 'issue_comment' && github.event.issue.pull_request == null && github.event.repository.is_template
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    uses: ./.github/workflows/implement.yml
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
+
+  question:
+    if: github.event_name == 'issue_comment' && github.event.issue.pull_request == null && github.event.repository.is_template
+    permissions:
+      contents: read
+      issues: write
+    uses: ./.github/workflows/question.yml
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
+
+  pr-review:
+    if: github.event_name == 'pull_request' && github.event.repository.is_template
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: ./.github/workflows/pr-review.yml
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
+      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
+      FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}

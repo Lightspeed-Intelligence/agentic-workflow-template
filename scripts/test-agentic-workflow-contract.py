@@ -7,6 +7,7 @@ import json
 import hashlib
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import tomllib
@@ -21,6 +22,9 @@ WORKFLOWS = {
 ACTION = ROOT / ".github/actions/run-agent/action.yml"
 SCRIPTS = ROOT / ".github/scripts/agentic"
 CALLER = ROOT / ".github/workflows/ci.yml"
+TEMPLATE_CI = ROOT / ".github/workflows/template-ci.yml"
+TEMPLATE_CLEANUP = ROOT / ".github/workflows/template-cleanup.yml"
+TEMPLATE_CLEANUP_SCRIPT = ROOT / ".github/template/cleanup.sh"
 
 
 def run(
@@ -70,13 +74,13 @@ def embedded_run_blocks(text: str) -> list[str]:
 
 
 def test_embedded_shell() -> None:
-    paths = [*WORKFLOWS.values(), ACTION]
+    paths = [*WORKFLOWS.values(), ACTION, TEMPLATE_CI, TEMPLATE_CLEANUP]
     for path in paths:
         for script in embedded_run_blocks(path.read_text()):
             sanitized = re.sub(r"\$\{\{[^\n]*?\}\}", "EXPRESSION", script)
             result = run(["bash", "-n"], input_text=sanitized, check=False)
             assert result.returncode == 0, f"{path}: {result.stderr}"
-    for path in SCRIPTS.glob("*.sh"):
+    for path in [*SCRIPTS.glob("*.sh"), TEMPLATE_CLEANUP_SCRIPT]:
         run(["bash", "-n", str(path)])
 
 
@@ -95,12 +99,12 @@ def test_final_job_names() -> None:
 
 
 def test_provider_and_permission_boundaries() -> None:
-    caller = CALLER.read_text()
-    assert "id-token: write" not in caller
-    contract_job = job_block(caller, "pr-review-contract")
+    contract_job = job_block(TEMPLATE_CI.read_text(), "pr-review-contract")
     assert "fetch-depth: 0" in contract_job
-    assert caller.count("OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}") == 4
-    assert caller.count("OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}") == 4
+    for caller in (CALLER.read_text(), TEMPLATE_CI.read_text()):
+        assert "id-token: write" not in caller
+        assert caller.count("OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}") == 4
+        assert caller.count("OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}") == 4
 
     final_jobs = {
         "question": "answer",
@@ -737,6 +741,119 @@ def test_model_ids_are_consistent() -> None:
             assert (outcome.returncode == 0) == accepted, (reviewer, model, outcome.stderr)
 
 
+def test_template_bootstrap() -> None:
+    # 从模板创建的新仓库只应留下调用方 workflow。GITHUB_TOKEN 可以删除 workflow 文件，但不能新建或
+    # 修改，所以 ci.yml 在模板里就必须是消费仓库要用的最终内容；模板仓库自身改由 template-ci.yml
+    # 调用本地版本，两者靠 is_template 条件互斥。
+    caller = CALLER.read_text()
+    template_ci = TEMPLATE_CI.read_text()
+    jobs = ["issue-dispatch", "implement", "question", "pr-review"]
+    guard = "github.event.repository.is_template"
+
+    def job_names(text: str) -> list[str]:
+        return re.findall(r"^  ([A-Za-z0-9_-]+):\n", text[text.index("\njobs:\n"):], re.M)
+
+    def body(text: str, job: str) -> list[str]:
+        return [
+            line for line in job_block(text, job).splitlines()
+            if line.strip() and not line.lstrip().startswith("#")
+        ]
+
+    assert job_names(caller) == jobs
+    assert job_names(template_ci) == ["pr-review-contract", *jobs]
+    assert "./.github/" not in caller and "runs-on:" not in caller
+    assert job_block(template_ci, "pr-review-contract").count(f"&& {guard}\n") == 1
+
+    for job in jobs:
+        remote, local = body(caller, job), body(template_ci, job)
+        remote_uses = f"    uses: Lightspeed-Intelligence/agentic-workflow-template/.github/workflows/{job}.yml@main"
+        local_uses = f"    uses: ./.github/workflows/{job}.yml"
+        assert remote.count(remote_uses) == 1 and local.count(local_uses) == 1, job
+        remote_if = [line for line in remote if line.startswith("    if: ")]
+        local_if = [line for line in local if line.startswith("    if: ")]
+        assert len(remote_if) == 1 and remote_if[0].endswith(f" && !{guard}"), (job, remote_if)
+        assert len(local_if) == 1 and local_if[0].endswith(f" && {guard}"), (job, local_if)
+        # 除调用目标和互斥条件外，两份 job 必须逐行相同，否则模板仓库的自测覆盖不到消费仓库的写法。
+        normalized = [
+            local_uses if line == remote_uses
+            else line.removesuffix(f" && !{guard}") + f" && {guard}" if line == remote_if[0]
+            else line
+            for line in remote
+        ]
+        assert normalized == local, job
+
+    readme = (ROOT / "README.md").read_text()
+    assert (
+        "https://raw.githubusercontent.com/Lightspeed-Intelligence/agentic-workflow-template/main/"
+        ".github/workflows/ci.yml"
+    ) in readme
+    # README 不再内嵌第二份调用方 YAML，避免与 ci.yml 漂移。
+    assert "/.github/workflows/issue-dispatch.yml@main" not in readme
+
+    cleanup = TEMPLATE_CLEANUP.read_text()
+    cleanup_job = job_block(cleanup, "cleanup")
+    condition = cleanup_job.split("    runs-on:", 1)[0]
+    for needle in (
+        f"!{guard}",
+        "!github.event.repository.fork",
+        "github.event.repository.default_branch",
+        "github.event_name == 'push' || inputs.confirm == 'cleanup'",
+    ):
+        assert needle in condition, needle
+    assert re.findall(r"^    permissions:\n((?:      .*\n)+)", cleanup_job, re.M) == ["      contents: write\n"]
+    assert "secrets." not in cleanup
+    # 自动清理只针对模板创建时的单个初始提交；镜像或已有后续提交的仓库必须手动确认。
+    assert '"$EVENT_NAME" == push && "$commits" != 1' in cleanup_job
+
+    kept = [".github/workflows/ci.yml", ".gitignore", ".llmdoc-tmp/.gitignore"]
+    tracked = run(["git", "ls-files", "-co", "--exclude-standard"], cwd=ROOT).stdout.splitlines()
+    with tempfile.TemporaryDirectory(prefix="agentic-template-") as tmp_name:
+        repo = Path(tmp_name) / "my-project"
+        for relative in tracked:
+            if (ROOT / relative).is_file():
+                (repo / relative).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / relative, repo / relative)
+        run(["git", "init", "-q", "-b", "main"], cwd=repo)
+        git(repo, "config", "user.name", "Contract Test")
+        git(repo, "config", "user.email", "contract@example.invalid")
+        git(repo, "config", "commit.gpgsign", "false")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "Initial commit")
+        env = {"PATH": os.environ["PATH"], "GITHUB_REPOSITORY": "acme/my-project"}
+        script = ["bash", ".github/template/cleanup.sh"]
+
+        (repo / "llmdoc/index.md").write_text("dirty\n")
+        assert run(script, cwd=repo, env=env, check=False).returncode != 0
+        git(repo, "checkout", "-q", "--", "llmdoc/index.md")
+        assert run(script, cwd=repo, env={"PATH": os.environ["PATH"]}, check=False).returncode != 0
+        assert git(repo, "status", "--porcelain") == ""
+
+        # 缺少任何一个应保留的文件，就不是完整的模板副本：必须整体拒绝，不能照常删除其余文件。
+        git(repo, "checkout", "-q", "-b", "partial")
+        git(repo, "rm", "-q", ".llmdoc-tmp/.gitignore")
+        git(repo, "commit", "-q", "-m", "partial copy")
+        assert run(script, cwd=repo, env=env, check=False).returncode != 0
+        assert git(repo, "status", "--porcelain") == "" and (repo / "llmdoc/index.md").exists()
+        git(repo, "checkout", "-q", "main")
+
+        run(script, cwd=repo, env=env)
+        assert sorted(git(repo, "ls-files").splitlines()) == sorted([*kept, "README.md"])
+        # 所有改动都已暂存，且没有遗留未跟踪文件。
+        status = run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=repo).stdout.splitlines()
+        assert status and all(line[:2] in ("D ", "M ") for line in status), status
+        for relative in kept:
+            assert (repo / relative).read_bytes() == (ROOT / relative).read_bytes(), relative
+        skeleton = (repo / "README.md").read_text()
+        assert skeleton.startswith("# my-project\n") and "{{" not in skeleton
+        git(repo, "commit", "-q", "-m", "cleanup")
+        # 清理后的仓库不再是模板副本，再次运行必须拒绝，而不是删掉项目自己的文件。
+        (repo / "src.txt").write_text("project file\n")
+        git(repo, "add", "src.txt")
+        git(repo, "commit", "-q", "-m", "project")
+        assert run(script, cwd=repo, env=env, check=False).returncode != 0
+        assert (repo / "src.txt").exists()
+
+
 def test_runtime_is_immutable() -> None:
     all_refs: set[str] = set()
     for path in WORKFLOWS.values():
@@ -784,6 +901,7 @@ def main() -> None:
     test_setup_hook_wiring()
     test_claude_failure_diagnostics()
     test_model_ids_are_consistent()
+    test_template_bootstrap()
     test_runtime_is_immutable()
     print("agentic workflow contract fixtures passed")
 

@@ -13,7 +13,10 @@ classification, implementation, technical Q&A, PR review and llmdoc maintenance.
 
 ## Major Areas
 
-- `.github/workflows/ci.yml`: local event router and caller example.
+- `.github/workflows/ci.yml`: the consumer caller, byte-for-byte what a consumer repository uses.
+- `.github/workflows/template-ci.yml`: this repository's event router, calling local workflow copies.
+- `.github/workflows/template-cleanup.yml` and `.github/template/`: one-shot cleanup that reduces a
+  repository created from the template to the caller, ignore rules and a README skeleton.
 - `.github/workflows/`: reusable task workflows.
 - `.github/actions/feishu-notify/`: reusable Feishu notification action for non-review workflows.
 - `.claude/skills/`: task behavior, trust and output contracts.

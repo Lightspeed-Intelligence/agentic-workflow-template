@@ -1,0 +1,68 @@
+# 只在「从本模板创建的新仓库」里生效：删除模板专用文件，只留下调用方 workflow，然后连同自身一起删除。
+# 模板仓库本身和它的 fork 不会运行。
+name: Template Cleanup
+
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "输入 cleanup，确认删除模板专用文件"
+        required: true
+        type: string
+
+jobs:
+  cleanup:
+    name: Remove template-only files
+    if: >-
+      !github.event.repository.is_template &&
+      !github.event.repository.fork &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+      (github.event_name == 'push' || inputs.confirm == 'cleanup')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          fetch-depth: 0
+
+      # 自动清理只针对模板创建时的那一个初始提交。分支上已有其他提交时（例如完整历史的镜像，
+      # 或创建后才启用 Actions），不自动删除任何文件，改由手动触发并确认。
+      - name: Decide whether to clean
+        id: gate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          commits=$(git rev-list --count HEAD)
+          if [[ "$EVENT_NAME" == push && "$commits" != 1 ]]; then
+            echo "::notice::分支上已有 ${commits} 个提交，跳过自动清理。如需清理模板专用文件，请在 Actions 页手动运行 Template Cleanup 并输入 cleanup。"
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Remove template-only files
+        if: steps.gate.outputs.run == 'true'
+        run: bash .github/template/cleanup.sh
+
+      - name: Commit and push
+        if: steps.gate.outputs.run == 'true'
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "chore: remove template-only files"
+          if ! git push origin "HEAD:refs/heads/$BRANCH"; then
+            echo "::error::清理提交推送失败。常见原因：分支在清理期间有了新提交，或仓库/组织不允许 workflow 写入内容。处理后可在 Actions 页手动运行 Template Cleanup。"
+            exit 1
+          fi
+          {
+            echo "## Template Cleanup"
+            echo "模板专用文件已删除，保留的文件："
+            echo '```'
+            git ls-files
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

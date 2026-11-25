@@ -7,13 +7,38 @@ publisher 执行。
 
 ## 快速开始
 
-### 1. 使用模板创建仓库
+接入方式只有一种：仓库里放一个调用方 workflow（`.github/workflows/ci.yml`），由它远程调用本仓库的
+reusable workflow。runner、脚本、Skill 和审查规范都在运行时从本仓库的固定 commit 获取，不需要复制。
+
+### 新仓库：从模板创建
 
 ```bash
-gh repo create my-project --template Lightspeed-Intelligence/agentic-workflow-template
+gh repo create my-project --private --template Lightspeed-Intelligence/agentic-workflow-template
 ```
 
-### 2. 配置 Secrets
+创建后不需要手动整理文件。创建仓库时的初始提交会触发 `Template Cleanup`，大约一分钟后自动提交一次
+清理：
+
+- 保留 `.github/workflows/ci.yml`、`.gitignore`、`.llmdoc-tmp/.gitignore`；
+- `README.md` 换成项目骨架；
+- 其余模板专用文件全部删除，包括 `Template Cleanup` 自身。
+
+自动清理只处理模板创建时的那一个初始提交。创建时 Actions 未启用，或清理前已经有了别的提交时，
+在 Actions 页手动运行 `Template Cleanup` 并输入 `cleanup`。
+
+### 已有仓库：添加调用方 workflow
+
+```bash
+mkdir -p .github/workflows
+curl -fsSL https://raw.githubusercontent.com/Lightspeed-Intelligence/agentic-workflow-template/main/.github/workflows/ci.yml \
+  -o .github/workflows/ci.yml
+```
+
+提交这个文件即可。它与从模板创建得到的是同一份。
+
+### 配置 Secrets
+
+组织已经配置了组织级 Secrets，并且对该仓库可见时，可以跳过这一步。
 
 ```bash
 # 必需
@@ -33,88 +58,15 @@ gh secret set PAT_TOKEN
 gh secret set FEISHU_WEBHOOK_TOKEN
 ```
 
-### 3. 创建调用工作流
+### 可选：提供项目上下文
 
-在目标仓库 `.github/workflows/` 创建：
+Agent 会先读消费仓库的 `llmdoc/`，实现任务时还会读 `AGENTS.md`。没有这些文件也能运行。
+Claude Code 以 `--bare` 运行，不会自动加载仓库里的 `CLAUDE.md`。
 
-```yaml
-# ci.yml - Issue 和 PR 事件触发
-name: Agentic CI
+### 以前按模板创建、带着整份模板副本的仓库
 
-on:
-  issues:
-    types: [opened]
-  issue_comment:
-    types: [created]
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-
-jobs:
-  # Issue 创建时自动分析；不会自动修复
-  issue-dispatch:
-    if: github.event_name == 'issues'
-    permissions:
-      contents: read
-      issues: write
-    uses: Lightspeed-Intelligence/agentic-workflow-template/.github/workflows/issue-dispatch.yml@main
-    secrets:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
-      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-      FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
-
-  # 评论 /impl 或 ok 时实现代码
-  implement:
-    if: github.event_name == 'issue_comment' && github.event.issue.pull_request == null
-    permissions:
-      contents: write
-      issues: write
-      pull-requests: write
-    uses: Lightspeed-Intelligence/agentic-workflow-template/.github/workflows/implement.yml@main
-    secrets:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
-      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-      FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
-
-  # 评论 /ask 或 /q 时回答问题
-  question:
-    if: github.event_name == 'issue_comment' && github.event.issue.pull_request == null
-    permissions:
-      contents: read
-      issues: write
-    uses: Lightspeed-Intelligence/agentic-workflow-template/.github/workflows/question.yml@main
-    secrets:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
-      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-      FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
-
-  # PR 创建/更新时自动审查
-  pr-review:
-    if: github.event_name == 'pull_request'
-    permissions:
-      contents: read
-      pull-requests: write
-    uses: Lightspeed-Intelligence/agentic-workflow-template/.github/workflows/pr-review.yml@main
-    secrets:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
-      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
-      FEISHU_WEBHOOK_TOKEN: ${{ secrets.FEISHU_WEBHOOK_TOKEN }}
-```
-
-### 4. 配置 CLAUDE.md
-
-在目标仓库根目录创建 `CLAUDE.md`，参考 `CLAUDE.md.example`。
+保留 `.gitignore` 和 `.llmdoc-tmp/.gitignore`，按「已有仓库」一节的命令覆盖 `.github/workflows/ci.yml`，
+删除其余从模板带来的文件，再把 `README.md` 换成项目自己的。
 
 ## 工作流
 
@@ -291,8 +243,11 @@ Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有
 ```
 .
 ├── .github/
-│   ├── workflows/           # 可复用工作流
-│   │   ├── issue-dispatch.yml
+│   ├── workflows/
+│   │   ├── ci.yml           # 调用方 workflow；消费仓库只需要这一个文件
+│   │   ├── template-ci.yml  # 模板仓库自测：调用本地 reusable workflow 并运行合同测试
+│   │   ├── template-cleanup.yml  # 新仓库首次 push 时删除模板专用文件
+│   │   ├── issue-dispatch.yml    # 以下五个是可复用工作流
 │   │   ├── implement.yml
 │   │   ├── question.yml
 │   │   ├── update-llmdoc.yml
@@ -300,9 +255,10 @@ Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有
 │   ├── actions/
 │   │   ├── run-agent/       # 固定版本 Codex / Claude Code runner
 │   │   └── feishu-notify/   # 飞书通知 Action
-│   └── scripts/             # 随固定版本分发的共享运行时脚本
-│       ├── agentic/         # 结果打包/校验/发布、环境准备脚本执行器
-│       └── pr-review/       # 历史审查认证与范围选择
+│   ├── scripts/             # 随固定版本分发的共享运行时脚本
+│   │   ├── agentic/         # 结果打包/校验/发布、环境准备脚本执行器
+│   │   └── pr-review/       # 历史审查认证与范围选择
+│   └── template/            # 模板清理脚本与新仓库的 README 骨架
 ├── .claude/
 │   └── skills/              # Claude Skills
 │       ├── github-comment/  # 基础规范
@@ -317,8 +273,8 @@ Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有
 │   ├── status.sh
 │   └── update-all.sh
 ├── llmdoc/                  # Agent 启动上下文、架构、指南、契约与项目记忆
-├── CLAUDE.md.example        # CLAUDE.md 示例
-└── design.md                # 设计文档
+├── docs/                    # PR 审查设计说明
+└── design.md                # 初版设计草稿（历史记录）
 ```
 
 ## JSON 输出结构
@@ -375,6 +331,9 @@ Agent 不接收该 token，也不自行查询评论。仅当前序 review 没有
 1. checkout 可以使用可选 PAT 读取跨仓库私有 submodule，但不会把凭据交给 Agent。
 2. Agent 可以读取各 submodule 的 `llmdoc/` 理解上下文。
 3. 自动发布暂不创建跨仓库 submodule commit/PR；需要此类改动时返回 `BLOCKED`。
+
+本仓库 `scripts/` 下有三个 submodule 辅助脚本。它们属于模板专用文件，不会带进从模板创建的仓库，
+需要时自行复制：
 
 ```bash
 # 初始化

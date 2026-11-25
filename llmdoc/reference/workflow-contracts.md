@@ -10,10 +10,25 @@
 | `pr-review.yml` | Non-draft PR opened/synchronized/reopened | reviewers read-only; publisher PR write | Claude primary, isolated Codex fallback, artifact publication |
 | `update-llmdoc.yml` | External reusable caller only | candidates/validators contents read; `update` contents/PR write | Agent produces an llmdoc-only bundle; validator gates deterministic PR publication |
 
-## Local Caller
+## Callers
 
-`.github/workflows/ci.yml` listens to Issue `opened`, Issue-comment `created`, and PR
-`opened/synchronize/reopened`. It does not currently call `update-llmdoc.yml`.
+`.github/workflows/ci.yml` and `.github/workflows/template-ci.yml` listen to Issue `opened`,
+Issue-comment `created`, and PR `opened/synchronize/reopened/ready_for_review`. Neither calls
+`update-llmdoc.yml`.
+
+| File | Runs when | Calls |
+|---|---|---|
+| `ci.yml` | `github.event.repository.is_template` is false | `Lightspeed-Intelligence/agentic-workflow-template/.github/workflows/<name>.yml@main` |
+| `template-ci.yml` | `is_template` is true | `./.github/workflows/<name>.yml`, plus the `pr-review-contract` job |
+
+## Template Cleanup
+
+- Trigger: `push`, or `workflow_dispatch` with input `confirm` equal to `cleanup`.
+- Job condition: not a template, not a fork, ref is the default branch.
+- Automatic `push` cleanup additionally requires exactly one commit on the branch.
+- Authority: `contents: write` only; no secret is referenced.
+- Kept files: `.github/workflows/ci.yml`, `.gitignore`, `.llmdoc-tmp/.gitignore`. `README.md` is replaced
+  by `.github/template/README.md` with `{{REPO_NAME}}` substituted. Everything else tracked is removed.
 
 Reusable workflow refs are resolved when a caller run is created. A rerun retains that resolved
 revision; after updating a moving ref, use a fresh matching event/run to consume the new revision.
@@ -116,6 +131,8 @@ the isolated publisher; template-runtime checkout continues to use the job token
 
 ## Sources of Truth
 
-- `.github/workflows/ci.yml`: local triggers and forwarded inputs/secrets.
+- `.github/workflows/ci.yml`: consumer triggers and forwarded secrets.
+- `.github/workflows/template-ci.yml`: this repository's triggers and forwarded secrets.
+- `.github/workflows/template-cleanup.yml` and `.github/template/cleanup.sh`: template bootstrap.
 - Each reusable workflow's `on.workflow_call` and job permissions: callable interface and authority.
 - `README.md`: consumer examples; reconcile it when executable contracts change.

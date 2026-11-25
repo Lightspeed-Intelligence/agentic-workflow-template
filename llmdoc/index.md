@@ -25,6 +25,8 @@
 - `llmdoc/reference/workflow-contracts.md`: trigger, authority and secret lookup facts.
 - `llmdoc/reference/pr-review-contract.md`: exact PR-review inputs, models, schema and failure semantics.
 - `llmdoc/memory/decisions/001-pr-review-authority-separation.md`: durable authority-separation decision.
+- `llmdoc/memory/decisions/002-self-cleaning-template.md`: why the template cleans itself in created
+  repositories instead of using a thin template, and what was verified live.
 - `llmdoc/memory/reflections/bounded-independent-review.md`: lesson from an unbounded review/evidence loop.
 - `llmdoc/memory/reflections/reusable-pr-review-integration-regressions.md`: lessons from trust bootstrap,
   private submodules, legacy consumers, provider routing and reusable-workflow reruns.

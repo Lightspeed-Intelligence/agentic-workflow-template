@@ -7,7 +7,11 @@ copying Agent logic.
 
 ## Core Components
 
-- `.github/workflows/ci.yml` (`jobs`): local caller that routes Issue, Issue-comment and PR events.
+- `.github/workflows/ci.yml` (`jobs`): consumer caller that routes Issue, Issue-comment and PR events
+  to this repository's reusable workflows at `@main`. Every job is skipped when the repository is a template.
+- `.github/workflows/template-ci.yml`: the same routing with local `uses: ./...` calls plus the contract
+  tests, run only in a template repository, so workflow changes are exercised by their own PR.
+- `.github/workflows/template-cleanup.yml` with `.github/template/cleanup.sh`: template bootstrap, see below.
 - `.github/workflows/issue-dispatch.yml`: classifies new Issues without modifying code, then publishes an Issue response.
 - `.github/workflows/implement.yml`: produces and validates a local candidate commit before an isolated publisher creates or updates a PR.
 - `.github/workflows/question.yml`: answers explicit question commands through an isolated publisher.
@@ -78,8 +82,31 @@ state the hook itself introduced are configuration errors that fail the job, in 
 compares against a baseline captured before the hook runs, so state that already existed — including
 directories the calling workflow created inside `repo_dir` — is not attributed to the hook.
 
+## Template Bootstrap
+
+GitHub copies every file on the default branch when a repository is created from a template and offers
+no exclude list. The template therefore cleans itself in the new repository instead of asking users to
+copy a caller by hand or maintaining a second, thin template repository.
+
+1. The creation commit raises a `push` event in the new repository. `template-cleanup.yml` runs when
+   the repository is neither a template nor a fork and the ref is the default branch.
+2. On `push` it proceeds only when the branch has exactly one commit — the shape template creation
+   produces. A mirror or a repository that already gained commits is left untouched; cleanup can then be
+   started with `workflow_dispatch` and the literal confirmation `cleanup`.
+3. `cleanup.sh` refuses a dirty worktree or an incomplete template copy, removes every tracked file
+   outside its keep list, and writes the README skeleton. The workflow commits and pushes with the job
+   token; pushes made with that token do not start further workflow runs.
+
+The job token may delete workflow files but may not create or update them. `ci.yml` must therefore
+already be the final consumer file inside the template, and the template's own routing has to live in a
+separate file that cleanup deletes. `github.event.repository.is_template` keeps the two mutually
+exclusive: `ci.yml` jobs require it false, `template-ci.yml` jobs require it true.
+
 ## Invariants
 
+- `ci.yml` and `template-ci.yml` job bodies are identical except for the call target and the
+  `is_template` condition; `scripts/test-agentic-workflow-contract.py` compares them line by line.
+- A file added to this repository is template-only unless `cleanup.sh` lists it in `keep`.
 - Called-workflow permissions cannot exceed caller permissions; every sensitive job still declares its own minimum.
 - Every Agent process is separated from GitHub write authority. Code-writing Agents may edit their
   disposable local checkout, but only a deterministic publisher may push, create PRs or comment.

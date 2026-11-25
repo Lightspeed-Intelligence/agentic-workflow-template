@@ -16,6 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/pr-review.yml"
 CALLER = ROOT / ".github/workflows/ci.yml"
+TEMPLATE_CI = ROOT / ".github/workflows/template-ci.yml"
 PREPARE = ROOT / ".github/scripts/pr-review/prepare-review-history.sh"
 README = ROOT / "README.md"
 QUESTION_WORKFLOW = ROOT / ".github/workflows/question.yml"
@@ -864,7 +865,7 @@ def main() -> None:
     test_blocking_findings_gate(workflow)
     ready_event = r"pull_request:\n\s+types: \[[^]\n]*\bready_for_review\b[^]\n]*\]"
     assert re.search(ready_event, caller), "draft-to-ready PRs must trigger fresh review"
-    assert re.search(ready_event, readme), "caller example must cover draft-to-ready review"
+    assert re.search(ready_event, TEMPLATE_CI.read_text()), "template self-CI must cover draft-to-ready review"
     test_extra_allowed_tools(workflow)
     test_setup_hook_wiring(workflow)
     test_setup_hook_behavior()

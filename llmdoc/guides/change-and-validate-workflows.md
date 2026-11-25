@@ -77,7 +77,7 @@ Also:
 
 `scripts/test-pr-review-contract.py` is the maintained offline truth table. It exercises the actual
 base-pinned history-preparation script plus the workflow's schemas, publisher gate, fallback/artifact
-conditions and extra-tool allowlist; `.github/workflows/ci.yml` runs it for pull requests.
+conditions and extra-tool allowlist; `.github/workflows/template-ci.yml` runs it for pull requests.
 
 ### External consumer verification
 
@@ -120,6 +120,13 @@ repeatedly clicking **Re-run jobs** cannot validate the newly merged workflow.
 
 ## Common Failure Points
 
+- Changing a caller job in only one of `ci.yml` and `template-ci.yml`. Consumers run the former and this
+  repository runs the latter, so a one-sided edit ships a caller that was never exercised here.
+- Expecting template cleanup to rewrite a workflow file. The job token can delete workflow files but a
+  push that creates or updates one is rejected; ship the final file in the template instead.
+- Validating template bootstrap with a plain push to a scratch repository only. Creation from a template
+  is what produces the single-commit `push` event the automatic path depends on; mark a scratch
+  repository as a template and create a second repository from it.
 - Treating `permissions:` alone as proof that the Agent cannot access persisted credentials.
 - Removing a credential from Agent processes and accidentally removing it from the earlier checkout
   phase that legitimately needs private-submodule read access.

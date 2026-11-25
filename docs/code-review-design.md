@@ -415,16 +415,15 @@ graph TD
 
 ## 新仓库接入清单
 
-给一个新仓库接入这套能力，只需要三步：
+给一个新仓库接入这套能力，只需要两步：
 
 ```mermaid
 flowchart TD
-    A["1️⃣ 配置 Secrets<br/>最少只需 ANTHROPIC_API_KEY<br/>可选为 Codex 配置 OPENAI_*<br/>私有 submodule 才传 PAT"]
-    B["2️⃣ 添加 ci.yml<br/>复制到 .github/workflows/<br/>改一下远程引用路径即可"]
-    C["3️⃣ 复制 Skills<br/>将 .claude/skills/ 目录放到仓库根目录<br/>AI 运行时需要读这些工作手册"]
-    D["🎉 完成<br/>不需要装任何依赖<br/>不需要改项目代码<br/>纯配置，PR 一提就自动审查"]
+    A["1️⃣ 添加 ci.yml<br/>从模板创建的仓库自带；已有仓库<br/>把它复制到 .github/workflows/"]
+    B["2️⃣ 配置 Secrets<br/>最少只需 ANTHROPIC_API_KEY<br/>组织级 Secrets 已覆盖时可跳过"]
+    D["🎉 完成<br/>不需要复制 Skill 或脚本<br/>不需要改项目代码<br/>纯配置，PR 一提就自动审查"]
 
-    A --> B --> C --> D
+    A --> B --> D
 
     style D fill:#c8e6c9,stroke:#4CAF50,stroke-width:2px
 ```

@@ -108,5 +108,6 @@ is a configuration error and fails the job; runtime failure is an environment co
 - `.github/scripts/pr-review/prepare-review-history.sh`: base-pinned history authentication and range selection.
 - `.github/scripts/agentic/run-setup-hook.sh`: path validation, execution, disclosure and worktree assertion.
 - `scripts/test-pr-review-contract.py`: tracked offline truth-table fixtures run by CI.
-- `.github/workflows/ci.yml`: local trigger and secret forwarding.
+- `.github/workflows/ci.yml` and `.github/workflows/template-ci.yml`: consumer and template-repository
+  triggers and secret forwarding.
 - `.claude/skills/pr-review/SKILL.md`: complete policy authoring source; runtime uses the exact revision pinned by the workflow.
