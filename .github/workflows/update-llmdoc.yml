@@ -39,12 +39,14 @@ on:
         value: ${{ jobs.update.outputs.structured_output }}
 
 concurrency:
-  group: agentic-update-llmdoc-${{ github.repository }}-${{ inputs.target_branch }}
+  # Keep retired schedules out of the queue for manual updates.
+  group: ${{ github.event_name == 'schedule' && github.repository_owner == 'Lightspeed-Intelligence' && 'retired-llmdoc' || 'agentic-update-llmdoc' }}-${{ github.repository }}-${{ inputs.target_branch }}
   cancel-in-progress: false
 
 jobs:
   prepare:
     name: Prepare llmdoc update input
+    if: github.event_name != 'schedule' || github.repository_owner != 'Lightspeed-Intelligence'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -425,7 +427,7 @@ jobs:
   update:
     name: update
     needs: [prepare, claude_candidate, validate_claude, codex_candidate, validate_codex]
-    if: always()
+    if: always() && needs.prepare.result != 'skipped'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -495,7 +497,7 @@ jobs:
   notify:
     name: Notify llmdoc update
     needs: update
-    if: always() && inputs.use_feishu_notify
+    if: always() && needs.update.result != 'skipped' && inputs.use_feishu_notify
     runs-on: ubuntu-latest
     permissions:
       contents: read
