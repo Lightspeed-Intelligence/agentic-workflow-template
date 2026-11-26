@@ -84,6 +84,20 @@ def test_embedded_shell() -> None:
         run(["bash", "-n", str(path)])
 
 
+def test_retired_llmdoc_schedule() -> None:
+    workflow = WORKFLOWS["update-llmdoc"].read_text()
+    # A skipped preparation normally skips its dependents. The publisher and notifier
+    # use always() to report real failures, so they must distinguish a skipped run.
+    gates = {
+        "prepare": "github.event_name != 'schedule' || github.repository_owner != 'Lightspeed-Intelligence'",
+        "update": "always() && needs.prepare.result != 'skipped'",
+        "notify": "always() && needs.update.result != 'skipped' && inputs.use_feishu_notify",
+    }
+    for name, condition in gates.items():
+        assert f"    if: {condition}" in job_block(workflow, name).splitlines()
+    assert "needs.prepare.result == 'success'" in job_block(workflow, "codex_candidate")
+
+
 def test_final_job_names() -> None:
     expected = {
         "question": "answer",
@@ -890,6 +904,7 @@ def test_runtime_is_immutable() -> None:
 def main() -> None:
     test_embedded_shell()
     test_final_job_names()
+    test_retired_llmdoc_schedule()
     test_provider_and_permission_boundaries()
     test_fallback_and_artifact_flow()
     test_issue_dispatch_is_analysis_only()

@@ -78,6 +78,8 @@ Claude Code 以 `--bare` 运行，不会自动加载仓库里的 `CLAUDE.md`。
 | `update-llmdoc`  | 外部 reusable caller   | 只修改 `llmdoc/`，校验候选 commit 后创建或更新 PR               |
 | `pr-review`      | PR 创建/更新            | 风险分级审查；默认完整 diff，可信的 1–3 个小问题修复可走增量     |
 
+Lightspeed-Intelligence 组织已停用定时 llmdoc 更新。旧调用方通过 `schedule` 触发时，更新器会跳过所有作业，包括 PR 发布与飞书通知。需要主动更新时，使用消费仓库的 `workflow_dispatch` 入口。
+
 ## Skills
 
 | Skill             | 描述     | 输出                           |
